@@ -14,7 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          id: string
+          timestamp: string
+          type: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          timestamp?: string
+          type?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          id?: string
+          timestamp?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      master_goals: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          description: string | null
+          id: string
+          points: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          points?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          points?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      page_views: {
+        Row: {
+          date: string
+          hits: number
+          updated_at: string
+        }
+        Insert: {
+          date: string
+          hits?: number
+          updated_at?: string
+        }
+        Update: {
+          date?: string
+          hits?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      settings: {
+        Row: {
+          data: Json
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          data?: Json
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          data?: Json
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      students: {
+        Row: {
+          assigned_goals: Json
+          bio: string | null
+          created_at: string
+          id: string
+          name: string
+          photo: string | null
+          previous_rank: number | null
+          tags: string[] | null
+          total_points: number | null
+          updated_at: string
+        }
+        Insert: {
+          assigned_goals?: Json
+          bio?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          photo?: string | null
+          previous_rank?: number | null
+          tags?: string[] | null
+          total_points?: number | null
+          updated_at?: string
+        }
+        Update: {
+          assigned_goals?: Json
+          bio?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          photo?: string | null
+          previous_rank?: number | null
+          tags?: string[] | null
+          total_points?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
