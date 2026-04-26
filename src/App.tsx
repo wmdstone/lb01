@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { firebaseApiFetch } from './lib/firebaseApi';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -173,13 +174,12 @@ const apiFetch = async (url: string, options: RequestInit = {}) => {
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  
-  const res = await fetch(url, { 
-    ...options, 
-    headers, 
-    credentials: 'same-origin',
-    cache: 'no-store'
-  });
+
+  // Route /api/* calls to the in-browser Firebase shim instead of an Express server.
+  const res = url.startsWith('/api/')
+    ? await firebaseApiFetch(url, { ...options, headers })
+    : await fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
+
   if (res.status === 401) {
     removeLocalToken();
     window.dispatchEvent(new Event('auth-expired'));
