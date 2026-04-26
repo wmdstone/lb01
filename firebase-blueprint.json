@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Learning categories for goals",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "MasterGoal": {
+      "title": "Master Goal",
+      "description": "A template for student achievements",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "title": { "type": "string" },
+        "points": { "type": "number" },
+        "description": { "type": "string" }
+      },
+      "required": ["categoryId", "title", "points"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student profile and their progress",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "bio": { "type": "string" },
+        "photo": { "type": "string" },
+        "tags": { 
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "assignedGoals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "goalId": { "type": "string" },
+              "completed": { "type": "boolean" }
+            }
+          }
+        },
+        "totalPoints": { "type": "number" }
+      },
+      "required": ["name", "photo"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Application settings and appearance",
+      "type": "object",
+      "properties": {
+        "primaryColor": { "type": "string" },
+        "accentColor": { "type": "string" },
+        "bgColor": { "type": "string" },
+        "textColor": { "type": "string" },
+        "appName": { "type": "string" },
+        "heroTitle": { "type": "string" },
+        "heroSubtitle": { "type": "string" },
+        "logoUrl": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Collection of goal categories"
+    },
+    "/masterGoals/{goalId}": {
+      "schema": "MasterGoal",
+      "description": "Collection of all possible goals"
+    },
+    "/students/{studentId}": {
+      "schema": "Student",
+      "description": "Collection of student profiles"
+    },
+    "/settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Collection of application settings"
+    }
+  }
+}
