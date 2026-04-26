@@ -1,29 +1,14 @@
-// Firebase-backed replacement for the Express /api/* endpoints.
-// Lets the existing apiFetch('/api/...') call sites in App.tsx work without a server.
+// Lovable Cloud-backed replacement for the original Express /api/* endpoints.
+// Keeps the exact same /api/* contract App.tsx expects, so no UI code had to change.
+// (Filename kept for backwards-compat with existing imports.)
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  getDoc,
-  addDoc,
-  setDoc,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
-import firebaseConfig from "../../firebase-applet-config.json";
+import { supabase } from "@/integrations/supabase/client";
 
-// --- INIT FIREBASE (singleton) ---
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig as any);
-const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
-
-// --- ADMIN PASSWORD (was on the Express server). ---
-// Frontend-only check: matches the original AI Studio behavior. Firestore
-// rules already allow public read/write, so this is presentation-level only.
+// --- Admin password (presentation-level, matches original AI Studio behavior) ---
 const ADMIN_PASSWORD = "janki_app";
 const TOKEN_VALUE = "client-admin-token";
 
+// --- Response helpers ---
 const ok = (body: any = { success: true }, status = 200): Response =>
   new Response(JSON.stringify(body), {
     status,
@@ -36,19 +21,70 @@ const fail = (status: number, message: string): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
-const stripId = (data: any) => {
-  if (!data || typeof data !== "object") return data;
-  const copy = { ...data };
-  delete copy.id;
-  return copy;
+// --- Mappers between DB (snake_case) and app (camelCase) ---
+const mapStudentRow = (r: any) => ({
+  id: r.id,
+  name: r.name,
+  bio: r.bio || "",
+  photo: r.photo || "",
+  tags: r.tags || [],
+  assignedGoals: r.assigned_goals || [],
+  totalPoints: r.total_points || 0,
+  previousRank: r.previous_rank ?? undefined,
+});
+
+const mapStudentInput = (s: any) => {
+  const out: any = {};
+  if (s.name !== undefined) out.name = s.name;
+  if (s.bio !== undefined) out.bio = s.bio;
+  if (s.photo !== undefined) out.photo = s.photo;
+  if (s.tags !== undefined) out.tags = s.tags;
+  if (s.assignedGoals !== undefined) out.assigned_goals = s.assignedGoals;
+  if (s.totalPoints !== undefined) out.total_points = s.totalPoints;
+  if (s.previousRank !== undefined) out.previous_rank = s.previousRank;
+  return out;
 };
 
-const listCollection = async (name: string) => {
-  const snap = await getDocs(collection(db, name));
-  return snap.docs.map((d) => ({ id: d.id, ...stripId(d.data()) }));
+const mapGoalRow = (r: any) => ({
+  id: r.id,
+  categoryId: r.category_id,
+  title: r.title,
+  points: r.points,
+  description: r.description || "",
+});
+
+const mapGoalInput = (g: any) => {
+  const out: any = {};
+  if (g.categoryId !== undefined) out.category_id = g.categoryId;
+  if (g.title !== undefined) out.title = g.title;
+  if (g.points !== undefined) out.points = g.points;
+  if (g.description !== undefined) out.description = g.description;
+  return out;
 };
 
-// --- Stats helpers (mirror server.ts) ---
+const mapCategoryRow = (r: any) => ({ id: r.id, name: r.name });
+const mapCategoryInput = (c: any) => {
+  const out: any = {};
+  if (c.name !== undefined) out.name = c.name;
+  return out;
+};
+
+// --- Activity log helper ---
+const logAction = async (
+  action: string,
+  details: string,
+  type: "education" | "system",
+) => {
+  try {
+    await supabase
+      .from("activity_logs")
+      .insert({ action, details, type, timestamp: new Date().toISOString() });
+  } catch (e) {
+    console.warn("log failed", e);
+  }
+};
+
+// --- Stats (matches original server.ts behavior) ---
 const computeStats = async (range: string) => {
   const now = new Date();
   let cutoff = new Date(0);
@@ -65,24 +101,24 @@ const computeStats = async (range: string) => {
     cutoff = d;
   }
 
-  const [studentSnap, catSnap, masterSnap, viewSnap] = await Promise.all([
-    getDocs(collection(db, "students")),
-    getDocs(collection(db, "categories")),
-    getDocs(collection(db, "masterGoals")),
-    getDocs(collection(db, "page_views")),
+  const [studentsRes, catRes, goalsRes, viewsRes] = await Promise.all([
+    supabase.from("students").select("*"),
+    supabase.from("categories").select("id"),
+    supabase.from("master_goals").select("id, points"),
+    supabase.from("page_views").select("date, hits"),
   ]);
 
   const masterPoints = new Map<string, number>();
-  masterSnap.docs.forEach((d) => masterPoints.set(d.id, (d.data() as any).points || 0));
+  (goalsRes.data || []).forEach((g: any) => masterPoints.set(g.id, g.points || 0));
 
   let totalPoints = 0;
   let completedGoals = 0;
   let activeGoals = 0;
   const chartMap: Record<string, number> = {};
 
-  studentSnap.docs.forEach((sd) => {
-    const s: any = sd.data();
-    (s.assignedGoals || []).forEach((g: any) => {
+  (studentsRes.data || []).forEach((s: any) => {
+    const goals = s.assigned_goals || [];
+    goals.forEach((g: any) => {
       activeGoals++;
       if (g.completed && g.completedAt) {
         const d = new Date(g.completedAt);
@@ -90,26 +126,25 @@ const computeStats = async (range: string) => {
           completedGoals++;
           const pts = g.points || masterPoints.get(g.goalId) || 0;
           totalPoints += pts;
-          const day = g.completedAt.split("T")[0];
+          const day = String(g.completedAt).split("T")[0];
           chartMap[day] = (chartMap[day] || 0) + pts;
         }
       }
     });
   });
 
-  const visitors = viewSnap.docs
-    .map((d) => d.data() as any)
-    .filter((v) => v.date && new Date(v.date) >= cutoff)
-    .reduce((acc, v) => acc + (v.hits || 0), 0);
+  const visitors = (viewsRes.data || [])
+    .filter((v: any) => v.date && new Date(v.date) >= cutoff)
+    .reduce((acc: number, v: any) => acc + (v.hits || 0), 0);
 
   const chartData = Object.keys(chartMap)
     .sort()
     .map((date) => ({ date, points: chartMap[date] }));
 
   return {
-    totalStudents: studentSnap.size,
+    totalStudents: studentsRes.data?.length || 0,
     totalActiveGoals: activeGoals,
-    totalCategories: catSnap.size,
+    totalCategories: catRes.data?.length || 0,
     completedGoals,
     totalPoints,
     uniqueVisitors: visitors,
@@ -117,32 +152,26 @@ const computeStats = async (range: string) => {
   };
 };
 
-const logAction = async (action: string, details: string, type: "education" | "system") => {
-  try {
-    await addDoc(collection(db, "activity_logs"), {
-      action,
-      details,
-      type,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (e) {
-    console.warn("log failed", e);
-  }
-};
-
 // --- Router ---
-export async function firebaseApiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function firebaseApiFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   const path = url.split("?")[0];
   const queryStr = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
   const query = new URLSearchParams(queryStr);
   let body: any = undefined;
   if (init.body) {
-    try { body = JSON.parse(init.body as string); } catch { body = init.body; }
+    try {
+      body = JSON.parse(init.body as string);
+    } catch {
+      body = init.body;
+    }
   }
 
   try {
-    // --- AUTH ---
+    // ===== AUTH =====
     if (path === "/api/login" && method === "POST") {
       if (body?.password === ADMIN_PASSWORD) {
         return ok({ success: true, token: TOKEN_VALUE });
@@ -153,48 +182,74 @@ export async function firebaseApiFetch(url: string, init: RequestInit = {}): Pro
       return ok();
     }
     if (path === "/api/me" && method === "GET") {
-      const auth = (init.headers as any)?.get?.("Authorization") || (init.headers as any)?.Authorization;
+      const headers: any = init.headers;
+      const auth = headers?.get?.("Authorization") || headers?.Authorization;
       const token = typeof auth === "string" ? auth.replace("Bearer ", "") : null;
       return ok({ authenticated: token === TOKEN_VALUE });
     }
 
-    // --- SETTINGS ---
+    // ===== SETTINGS =====
     if (path === "/api/settings" && method === "GET") {
-      const snap = await getDoc(doc(db, "settings", "appearance"));
-      return ok(snap.exists() ? snap.data() : {});
+      const { data } = await supabase
+        .from("settings")
+        .select("data")
+        .eq("id", "appearance")
+        .maybeSingle();
+      return ok((data as any)?.data || {});
     }
     if (path === "/api/settings" && method === "PUT") {
-      await setDoc(doc(db, "settings", "appearance"), body || {}, { merge: true });
-      logAction("Theme Applied", "Admin applied new theme and branding settings", "system");
+      const payload = body || {};
+      const { error } = await supabase
+        .from("settings")
+        .upsert({ id: "appearance", data: payload }, { onConflict: "id" });
+      if (error) return fail(500, error.message);
+      logAction(
+        "Theme Applied",
+        "Admin applied new theme and branding settings",
+        "system",
+      );
       return ok();
     }
 
-    // --- STUDENTS ---
+    // ===== STUDENTS =====
     if (path === "/api/students" && method === "GET") {
-      return ok(await listCollection("students"));
+      const { data, error } = await supabase.from("students").select("*");
+      if (error) return fail(500, error.message);
+      return ok((data || []).map(mapStudentRow));
     }
     if (path === "/api/students" && method === "POST") {
-      const data = stripId(body);
-      const ref = await addDoc(collection(db, "students"), data);
-      return ok({ id: ref.id, ...data });
+      const input = mapStudentInput(body || {});
+      const { data, error } = await supabase
+        .from("students")
+        .insert(input)
+        .select()
+        .single();
+      if (error) return fail(500, error.message);
+      return ok(mapStudentRow(data));
     }
     if (path === "/api/students/snapshot-ranks" && method === "POST") {
-      const studentSnap = await getDocs(collection(db, "students"));
-      const masterSnap = await getDocs(collection(db, "masterGoals"));
+      const [{ data: students }, { data: goals }] = await Promise.all([
+        supabase.from("students").select("id, assigned_goals"),
+        supabase.from("master_goals").select("id, points"),
+      ]);
       const map = new Map<string, number>();
-      masterSnap.docs.forEach((d) => map.set(d.id, (d.data() as any).points || 0));
-      const list = studentSnap.docs.map((d) => {
-        const data: any = d.data();
-        const pts = (data.assignedGoals || []).reduce(
-          (acc: number, g: any) => (g.completed ? acc + (g.points || map.get(g.goalId) || 0) : acc),
-          0,
-        );
-        return { id: d.id, pts };
-      });
-      list.sort((a, b) => b.pts - a.pts);
+      (goals || []).forEach((g: any) => map.set(g.id, g.points || 0));
+      const ranked = (students || [])
+        .map((s: any) => {
+          const pts = (s.assigned_goals || []).reduce(
+            (acc: number, g: any) =>
+              g.completed ? acc + (g.points || map.get(g.goalId) || 0) : acc,
+            0,
+          );
+          return { id: s.id, pts };
+        })
+        .sort((a, b) => b.pts - a.pts);
       await Promise.all(
-        list.map((s, idx) =>
-          setDoc(doc(db, "students", s.id), { previousRank: idx + 1 }, { merge: true }),
+        ranked.map((s, idx) =>
+          supabase
+            .from("students")
+            .update({ previous_rank: idx + 1 })
+            .eq("id", s.id),
         ),
       );
       return ok();
@@ -203,87 +258,138 @@ export async function firebaseApiFetch(url: string, init: RequestInit = {}): Pro
     if (studentMatch) {
       const id = studentMatch[1];
       if (method === "PUT") {
-        const data = stripId(body);
-        await setDoc(doc(db, "students", id), data, { merge: true });
-        logAction("Student Updated", `Updated data/goals for student ${data?.name || id}`, "education");
-        return ok({ id, ...data });
+        const input = mapStudentInput(body || {});
+        const { data, error } = await supabase
+          .from("students")
+          .update(input)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) return fail(500, error.message);
+        logAction(
+          "Student Updated",
+          `Updated data/goals for student ${body?.name || id}`,
+          "education",
+        );
+        return ok(mapStudentRow(data));
       }
       if (method === "DELETE") {
-        await deleteDoc(doc(db, "students", id));
+        const { error } = await supabase.from("students").delete().eq("id", id);
+        if (error) return fail(500, error.message);
         return ok();
       }
     }
 
-    // --- CATEGORIES ---
+    // ===== CATEGORIES =====
     if (path === "/api/categories" && method === "GET") {
-      return ok(await listCollection("categories"));
+      const { data, error } = await supabase.from("categories").select("*");
+      if (error) return fail(500, error.message);
+      return ok((data || []).map(mapCategoryRow));
     }
     if (path === "/api/categories" && method === "POST") {
-      const data = stripId(body);
-      const ref = await addDoc(collection(db, "categories"), data);
-      return ok({ id: ref.id, ...data });
+      const input = mapCategoryInput(body || {});
+      const { data, error } = await supabase
+        .from("categories")
+        .insert(input)
+        .select()
+        .single();
+      if (error) return fail(500, error.message);
+      return ok(mapCategoryRow(data));
     }
     const catMatch = path.match(/^\/api\/categories\/([^/]+)$/);
     if (catMatch) {
       const id = catMatch[1];
       if (method === "PUT") {
-        const data = stripId(body);
-        await setDoc(doc(db, "categories", id), data, { merge: true });
-        return ok({ id, ...data });
+        const input = mapCategoryInput(body || {});
+        const { data, error } = await supabase
+          .from("categories")
+          .update(input)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) return fail(500, error.message);
+        return ok(mapCategoryRow(data));
       }
       if (method === "DELETE") {
-        await deleteDoc(doc(db, "categories", id));
+        const { error } = await supabase.from("categories").delete().eq("id", id);
+        if (error) return fail(500, error.message);
         return ok();
       }
     }
 
-    // --- MASTER GOALS ---
+    // ===== MASTER GOALS =====
     if (path === "/api/masterGoals" && method === "GET") {
-      return ok(await listCollection("masterGoals"));
+      const { data, error } = await supabase.from("master_goals").select("*");
+      if (error) return fail(500, error.message);
+      return ok((data || []).map(mapGoalRow));
     }
     if (path === "/api/masterGoals" && method === "POST") {
-      const data = stripId(body);
-      const ref = await addDoc(collection(db, "masterGoals"), data);
-      return ok({ id: ref.id, ...data });
+      const input = mapGoalInput(body || {});
+      const { data, error } = await supabase
+        .from("master_goals")
+        .insert(input)
+        .select()
+        .single();
+      if (error) return fail(500, error.message);
+      return ok(mapGoalRow(data));
     }
     const goalMatch = path.match(/^\/api\/masterGoals\/([^/]+)$/);
     if (goalMatch) {
       const id = goalMatch[1];
       if (method === "PUT") {
-        const data = stripId(body);
-        await setDoc(doc(db, "masterGoals", id), data, { merge: true });
-        return ok({ id, ...data });
+        const input = mapGoalInput(body || {});
+        const { data, error } = await supabase
+          .from("master_goals")
+          .update(input)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) return fail(500, error.message);
+        return ok(mapGoalRow(data));
       }
       if (method === "DELETE") {
-        await deleteDoc(doc(db, "masterGoals", id));
+        const { error } = await supabase.from("master_goals").delete().eq("id", id);
+        if (error) return fail(500, error.message);
         return ok();
       }
     }
 
-    // --- TRACK VISIT ---
+    // ===== TRACK VISIT =====
     if (path === "/api/track-visit" && method === "POST") {
       const today = new Date().toISOString().split("T")[0];
-      const ref = doc(db, "page_views", today);
-      const snap = await getDoc(ref);
-      const hits = snap.exists() ? ((snap.data() as any).hits || 0) + 1 : 1;
-      await setDoc(ref, { hits, date: today }, { merge: true });
+      const { data: existing } = await supabase
+        .from("page_views")
+        .select("hits")
+        .eq("date", today)
+        .maybeSingle();
+      const hits = (existing?.hits || 0) + 1;
+      const { error } = await supabase
+        .from("page_views")
+        .upsert({ date: today, hits }, { onConflict: "date" });
+      if (error) return fail(500, error.message);
       return ok();
     }
 
-    // --- LOGS ---
+    // ===== LOGS =====
     if (path === "/api/logs" && method === "GET") {
-      return ok(await listCollection("activity_logs"));
+      const { data, error } = await supabase
+        .from("activity_logs")
+        .select("*")
+        .order("timestamp", { ascending: false })
+        .limit(500);
+      if (error) return fail(500, error.message);
+      return ok(data || []);
     }
 
-    // --- STATS ---
+    // ===== STATS =====
     if (path.startsWith("/api/stats") && method === "GET") {
       const range = query.get("range") || "all";
       return ok(await computeStats(range));
     }
 
     return fail(404, `No handler for ${method} ${path}`);
-  } catch (err) {
-    console.error("firebaseApi error:", method, path, err);
-    return fail(500, String(err));
+  } catch (err: any) {
+    console.error("api error:", method, path, err);
+    return fail(500, String(err?.message || err));
   }
 }
