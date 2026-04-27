@@ -13,10 +13,15 @@
 //   - delete  { table, query }  → DELETE /rest/v1/<table>?<query>
 //   - exec_sql { sql }          → POST /pg/query (via Postgres Meta) — used to bootstrap schema
 
-import { corsHeaders } from "@supabase/supabase-js/cors";
-
 // deno-lint-ignore no-explicit-any
 declare const Deno: any;
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 type Body = {
   url: string;
