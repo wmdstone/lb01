@@ -672,7 +672,10 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
         animate={{ opacity: 1, y: 0 }} 
         transition={{ delay: config.delay }}
         className="flex flex-col items-center justify-end w-1/3 px-1 md:px-2 pt-6"
-        onClick={() => navigateTo('/student', { id: student.id })}
+        onClick={() => {
+          trackEvent('profile_open', { refId: student.id, metadata: { source: 'podium' } });
+          navigateTo('/student', { id: student.id });
+        }}
       >
         <div className="relative mb-2 cursor-pointer group active:scale-95 transition-transform flex flex-col items-center">
           {config.crown}
@@ -755,7 +758,10 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
               return (
                 <li 
                   key={student.id || `leader-${index}`} 
-                  onClick={() => navigateTo('/student', { id: student.id })}
+                  onClick={() => {
+                    trackEvent('profile_open', { refId: student.id, metadata: { source: 'leaderboard' } });
+                    navigateTo('/student', { id: student.id });
+                  }}
                   className="flex items-center gap-3 md:gap-4 py-5 px-4 md:px-8 hover:bg-primary-50/30 transition-all cursor-pointer group active:scale-[0.99] bg-base-100"
                 >
                   <div className="flex flex-col items-center gap-1 w-8 md:w-10">
