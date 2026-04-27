@@ -11,6 +11,12 @@ import {
 } from './lib/timeRanges';
 import { isWithinRange, type DateRange } from './lib/timeRanges';
 import { TimeRangeFilter, createDefaultTimeRangeValue, type TimeRangeValue } from './components/TimeRangeFilter';
+import {
+  StudentSearchFilter,
+  applyStudentSearchFilter,
+  emptyStudentSearchFilter,
+  type StudentSearchFilterValue,
+} from './components/StudentSearchFilter';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -564,6 +570,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   appSettings?: any;
 }) {
   const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
+  const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -650,7 +657,17 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   }, [students, masterGoals, calculateTotalPoints, timeFilter]);
 
   const top3 = [sortedStudents[1], sortedStudents[0], sortedStudents[2]];
-  const restOfStudents = sortedStudents.slice(3);
+  const restOfStudentsRaw = sortedStudents.slice(3);
+  const restOfStudents = useMemo(
+    () => applyStudentSearchFilter(restOfStudentsRaw, searchFilter),
+    [restOfStudentsRaw, searchFilter]
+  );
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    (students || []).forEach((s) => (s.tags || []).forEach((t) => t && set.add(t)));
+    return Array.from(set);
+  }, [students]);
+  const hasActiveFilter = !!(searchFilter.query || searchFilter.tags.length > 0);
 
   // Mocking "My Rank": User yang sedang login (Demo purpose, taking first student)
   const currentLoggedInStudentId = students[0]?.id;
@@ -742,6 +759,14 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
       {/* REST OF STUDENTS LIST */}
       <div className="bg-base-100 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-base-200 overflow-hidden mx-0">
+        <div className="px-4 md:px-8 pt-6 pb-2">
+          <StudentSearchFilter
+            value={searchFilter}
+            onChange={setSearchFilter}
+            availableTags={availableTags}
+            placeholder="Search rank 4 and below by name..."
+          />
+        </div>
         {isLoading ? (
           <div className="p-20 flex flex-col items-center gap-4">
             <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
@@ -749,7 +774,9 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
           </div>
         ) : restOfStudents.length === 0 ? (
           <div className="p-12 text-center text-text-light">
-            <p className="font-bold">No other students found.</p>
+            <p className="font-bold">
+              {hasActiveFilter ? 'No students match your search or tag filter.' : 'No other students found.'}
+            </p>
           </div>
         ) : (
           <ul className="divide-y divide-slate-50">
@@ -1278,17 +1305,22 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
 // --- ADMIN TABS (API INTEGRATED) ---
 
 function AdminStudentsTab({ students, refreshData, masterGoals, categories, calculateTotalPoints }: any) {
-  const [search, setSearch] = useState('');
+  const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
 
   const studentsList = Array.isArray(students) ? students : [];
-  const filtered = studentsList.filter((s: any) => {
-    const q = search.toLowerCase();
-    return s.name?.toLowerCase().includes(q) || (s.tags && s.tags.some((tag: string) => tag.toLowerCase().includes(q)));
-  });
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    studentsList.forEach((s: any) => (s.tags || []).forEach((t: string) => t && set.add(t)));
+    return Array.from(set);
+  }, [studentsList]);
+  const filtered = useMemo(
+    () => applyStudentSearchFilter(studentsList, searchFilter),
+    [studentsList, searchFilter]
+  );
 
   const handleSave = async (formData: any) => {
     // 1. Calculate old ranks for all students
@@ -1363,11 +1395,12 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-light" />
-        <input 
-          type="text" placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-12 pr-6 py-4 rounded-2xl border border-base-200 focus:ring-4 focus:ring-primary-50/50 focus:border-primary-500 transition-all text-sm outline-none bg-base-200/50 focus:bg-base-100"
+      <div className="mb-6">
+        <StudentSearchFilter
+          value={searchFilter}
+          onChange={setSearchFilter}
+          availableTags={availableTags}
+          placeholder="Search students by name..."
         />
       </div>
 
