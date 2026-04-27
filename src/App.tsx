@@ -2599,3 +2599,171 @@ function StatCard({ title, value, icon: Icon, color }: any) {
     </div>
   );
 }
+
+// ============================================================================
+// App Analytics — visitors / logged-in / device / interactions, sourced from
+// the public.app_events table populated by src/lib/analytics.ts
+// ============================================================================
+
+const INTERACTION_EVENTS = ['leaderboard_filter', 'profile_open', 'admin_action', 'admin_login'] as const;
+
+function AppAnalyticsPanel() {
+  const [filter, setFilter] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
+  const [events, setEvents] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        let q = supabase.from('app_events').select('*').order('created_at', { ascending: true }).limit(10000);
+        if (filter.range.start) q = q.gte('created_at', filter.range.start.toISOString());
+        if (filter.range.end)   q = q.lte('created_at', filter.range.end.toISOString());
+        const { data, error } = await q;
+        if (error) throw error;
+        if (!cancelled) setEvents(data || []);
+      } catch (e) {
+        console.error('Failed to load app_events', e);
+        if (!cancelled) setEvents([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [filter]);
+
+  // Aggregate metrics + chart-ready series.
+  const metrics = useMemo(() => {
+    const list = events || [];
+    const sessionVisitors = new Set<string>();
+    const adminSessions = new Set<string>();
+    const deviceSessions: Record<string, Set<string>> = { desktop: new Set(), tablet: new Set(), mobile: new Set() };
+    let interactions = 0;
+    const interactionBreakdown: Record<string, number> = {};
+
+    // Daily buckets (YYYY-MM-DD).
+    const buckets: Record<string, { visitors: Set<string>; loggedIn: Set<string>; interactions: number }> = {};
+    const bucketKey = (d: Date) => d.toISOString().slice(0, 10);
+
+    list.forEach((e: any) => {
+      const sid = e.session_id || 'anon';
+      sessionVisitors.add(sid);
+      if (e.is_admin) adminSessions.add(sid);
+      if (deviceSessions[e.device]) deviceSessions[e.device].add(sid);
+      else deviceSessions.desktop.add(sid);
+
+      if ((INTERACTION_EVENTS as readonly string[]).includes(e.event_type)) {
+        interactions++;
+        interactionBreakdown[e.event_type] = (interactionBreakdown[e.event_type] || 0) + 1;
+      }
+
+      const k = bucketKey(new Date(e.created_at));
+      if (!buckets[k]) buckets[k] = { visitors: new Set(), loggedIn: new Set(), interactions: 0 };
+      buckets[k].visitors.add(sid);
+      if (e.is_admin) buckets[k].loggedIn.add(sid);
+      if ((INTERACTION_EVENTS as readonly string[]).includes(e.event_type)) buckets[k].interactions++;
+    });
+
+    const trend = Object.keys(buckets).sort().map((date) => ({
+      date,
+      visitors: buckets[date].visitors.size,
+      loggedIn: buckets[date].loggedIn.size,
+      interactions: buckets[date].interactions,
+    }));
+
+    const deviceData = (['desktop', 'tablet', 'mobile'] as const).map((d) => ({
+      device: d.charAt(0).toUpperCase() + d.slice(1),
+      visitors: deviceSessions[d].size,
+    }));
+
+    const interactionData = Object.keys(interactionBreakdown).map((k) => ({
+      type: k.replace(/_/g, ' '),
+      count: interactionBreakdown[k],
+    }));
+
+    return {
+      visitors: sessionVisitors.size,
+      loggedIn: adminSessions.size,
+      anonymous: sessionVisitors.size - adminSessions.size,
+      interactions,
+      trend,
+      deviceData,
+      interactionData,
+    };
+  }, [events]);
+
+  return (
+    <div className="mt-12">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <h3 className="text-2xl font-black text-text-main underline decoration-accent-500 decoration-4 underline-offset-8">
+          App Analytics
+        </h3>
+        <TimeRangeFilter value={filter} onChange={setFilter} size="md" />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center p-20"><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></div>
+      ) : (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <StatCard title="App Visitors"    value={metrics.visitors}     icon={Users}      color="text-blue-500" />
+            <StatCard title="Logged-in Visitors" value={metrics.loggedIn}  icon={LogIn}      color="text-emerald-500" />
+            <StatCard title="Anonymous Visitors" value={metrics.anonymous} icon={UserIcon}   color="text-slate-500" />
+            <StatCard title="Interactions"    value={metrics.interactions} icon={TrendingUp} color="text-purple-500" />
+          </div>
+
+          <div className="bg-base-50 rounded-2xl p-6 border border-base-200 shadow-sm">
+            <h4 className="font-bold text-text-main mb-6">Visitor & Interaction Trend</h4>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={metrics.trend}>
+                  <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <RechartsTooltip />
+                  <Line type="monotone" dataKey="visitors"     stroke="var(--theme-primary-600)" strokeWidth={3} dot={{ r: 3 }} name="Visitors" />
+                  <Line type="monotone" dataKey="loggedIn"     stroke="#10b981"                  strokeWidth={3} dot={{ r: 3 }} name="Logged-in" />
+                  <Line type="monotone" dataKey="interactions" stroke="#a855f7"                  strokeWidth={3} dot={{ r: 3 }} name="Interactions" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-base-50 rounded-2xl p-6 border border-base-200 shadow-sm">
+              <h4 className="font-bold text-text-main mb-6">Visitors by Device</h4>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={metrics.deviceData}>
+                    <XAxis dataKey="device" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <RechartsTooltip />
+                    <Bar dataKey="visitors" fill="var(--theme-primary-600)" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-base-50 rounded-2xl p-6 border border-base-200 shadow-sm">
+              <h4 className="font-bold text-text-main mb-6">Interactions Breakdown</h4>
+              {metrics.interactionData.length === 0 ? (
+                <p className="text-text-muted text-sm text-center py-16">No interactions in this range</p>
+              ) : (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={metrics.interactionData} layout="vertical" margin={{ left: 24 }}>
+                      <XAxis type="number" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                      <YAxis type="category" dataKey="type" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} width={120} />
+                      <RechartsTooltip />
+                      <Bar dataKey="count" fill="#a855f7" radius={[0, 8, 8, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
