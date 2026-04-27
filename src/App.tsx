@@ -541,7 +541,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   isLoading: boolean;
   appSettings?: any;
 }) {
-  const [timeFilter, setTimeFilter] = useState<'total' | 'monthly' | 'weekly'>('total');
+   const [timeFilter, setTimeFilter] = useState<'all-time' | 'monthly' | 'weekly'>('all-time');
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -565,8 +565,8 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       return goals.filter(g => {
         if (!g.completed) return false;
         
-        // "Total" includes all completed goals regardless of date
-        if (timeFilter === 'total') return true;
+         // "all-time" includes all completed goals regardless of date
+         if (timeFilter === 'all-time') return true;
         
         // "Monthly" and "Weekly" require completedAt to check boundaries
         if (!g.completedAt) return false;
@@ -689,7 +689,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
           {/* HORIZONTAL TIME FILTERS */}
           <div className="flex justify-center mt-6">
             <div className="bg-base-900/30 backdrop-blur-md p-1.5 rounded-full flex items-center gap-1 overflow-x-auto no-scrollbar scrollbar-hide snap-x">
-               {['total', 'monthly', 'weekly'].map((filter) => (
+                {['all-time', 'monthly', 'weekly'].map((filter) => (
                  <button 
                   key={filter} 
                   onClick={() => setTimeFilter(filter as any)}
