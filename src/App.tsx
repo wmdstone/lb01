@@ -2478,7 +2478,6 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
         </div>
       )}
 
-      <AppAnalyticsPanel />
     </div>
   );
 }
@@ -2582,6 +2581,10 @@ function AdminStatisticsTab() {
           </div>
         </div>
       )}
+
+      <div className="mt-8">
+        <AppAnalyticsPanel />
+      </div>
     </div>
   );
 }
