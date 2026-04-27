@@ -32,6 +32,7 @@ type Body = {
     | "insert"
     | "upsert"
     | "delete"
+    | "update"
     | "exec_sql";
   table?: string;
   query?: string;
@@ -101,7 +102,10 @@ Deno.serve(async (req: Request) => {
       if (!body.table || !Array.isArray(body.rows)) return bad("table + rows required");
       const headers: Record<string, string> = {
         ...restHeaders,
-        Prefer: op === "upsert" ? "resolution=merge-duplicates,return=minimal" : "return=minimal",
+        Prefer:
+          op === "upsert"
+            ? "resolution=merge-duplicates,return=representation"
+            : "return=representation",
       };
       const qs = op === "upsert" && body.onConflict ? `?on_conflict=${body.onConflict}` : "";
       const r = await fetch(`${base}/rest/v1/${body.table}${qs}`, {
@@ -111,7 +115,26 @@ Deno.serve(async (req: Request) => {
       });
       const text = await r.text();
       if (!r.ok) return bad(`${op} failed: ${r.status} ${text}`, r.status);
-      return new Response(JSON.stringify({ ok: true, count: body.rows.length }), {
+      let parsed: any = [];
+      try { parsed = text ? JSON.parse(text) : []; } catch { parsed = []; }
+      return new Response(JSON.stringify({ ok: true, count: body.rows.length, rows: parsed }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (op === "update") {
+      if (!body.table || !Array.isArray(body.rows) || !body.rows[0])
+        return bad("table + rows[0] (patch) required");
+      const q = body.query || "";
+      if (!q) return bad("update requires a query filter (e.g. id=eq.123)");
+      const r = await fetch(`${base}/rest/v1/${body.table}?${q}`, {
+        method: "PATCH",
+        headers: { ...restHeaders, Prefer: "return=representation" },
+        body: JSON.stringify(body.rows[0]),
+      });
+      const text = await r.text();
+      if (!r.ok) return bad(`update failed: ${r.status} ${text}`, r.status);
+      return new Response(text || "[]", {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

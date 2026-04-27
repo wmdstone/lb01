@@ -1,23 +1,22 @@
 // Lovable Cloud-backed replacement for the original Express /api/* endpoints.
-// Keeps the exact same /api/* contract App.tsx expects, so no UI code had to change.
-// (Filename kept for backwards-compat with existing imports.)
+// Talks to whichever database connection is currently active (the default
+// Lovable Cloud project, or any user-added external Supabase project).
+//
+// IMPORTANT: All reads/writes go through `connection-aware` helpers in
+// dbConnections.ts so service-role keys (which Supabase blocks in browsers)
+// transparently route through the db-proxy edge function.
 
-import { getActiveClient } from "@/lib/dbConnections";
+import {
+  getActiveConnection,
+  connSelect,
+  connSelectQuery,
+  connInsertReturning,
+  connUpsertReturning,
+  connUpdate,
+  connDeleteById,
+} from "@/lib/dbConnections";
 
-// Always resolve the currently-active database client (default Lovable Cloud
-// or a user-selected external Supabase project).
-const supabase: any = new Proxy(
-  {},
-  {
-    get(_t, prop) {
-      const client = getActiveClient() as any;
-      const value = client[prop];
-      return typeof value === "function" ? value.bind(client) : value;
-    },
-  },
-);
-
-// --- Admin password (presentation-level, matches original AI Studio behavior) ---
+// --- Admin password (presentation-level) ---
 const ADMIN_PASSWORD = "janki_app";
 const TOKEN_VALUE = "client-admin-token";
 
@@ -90,22 +89,23 @@ const logAction = async (
   type: "education" | "system",
 ) => {
   try {
-    await supabase
-      .from("activity_logs")
-      .insert({ action, details, type, timestamp: new Date().toISOString() });
+    const conn = getActiveConnection();
+    await connInsertReturning(conn, "activity_logs", [
+      { action, details, type, timestamp: new Date().toISOString() },
+    ]);
   } catch (e) {
     console.warn("log failed", e);
   }
 };
 
-// --- Stats (matches original server.ts behavior, plus custom date ranges) ---
+// --- Stats ---
 const computeStats = async (range: string, from?: string | null, to?: string | null) => {
+  const conn = getActiveConnection();
   const now = new Date();
   let cutoff = new Date(0);
   let endCutoff: Date | null = null;
 
   if (from || to) {
-    // Custom range — overrides preset.
     cutoff = from ? new Date(from) : new Date(0);
     endCutoff = to ? new Date(to) : null;
   } else {
@@ -124,21 +124,21 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
   }
 
   const [studentsRes, catRes, goalsRes, viewsRes] = await Promise.all([
-    supabase.from("students").select("*"),
-    supabase.from("categories").select("id"),
-    supabase.from("master_goals").select("id, points"),
-    supabase.from("page_views").select("date, hits"),
+    connSelect(conn, "students").catch(() => []),
+    connSelect(conn, "categories").catch(() => []),
+    connSelect(conn, "master_goals").catch(() => []),
+    connSelect(conn, "page_views").catch(() => []),
   ]);
 
   const masterPoints = new Map<string, number>();
-  (goalsRes.data || []).forEach((g: any) => masterPoints.set(g.id, g.points || 0));
+  (goalsRes || []).forEach((g: any) => masterPoints.set(g.id, g.points || 0));
 
   let totalPoints = 0;
   let completedGoals = 0;
   let activeGoals = 0;
   const chartMap: Record<string, number> = {};
 
-  (studentsRes.data || []).forEach((s: any) => {
+  (studentsRes || []).forEach((s: any) => {
     const goals = s.assigned_goals || [];
     goals.forEach((g: any) => {
       activeGoals++;
@@ -155,7 +155,7 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
     });
   });
 
-  const visitors = (viewsRes.data || [])
+  const visitors = (viewsRes || [])
     .filter((v: any) => {
       if (!v.date) return false;
       const d = new Date(v.date);
@@ -168,9 +168,9 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
     .map((date) => ({ date, points: chartMap[date] }));
 
   return {
-    totalStudents: studentsRes.data?.length || 0,
+    totalStudents: studentsRes?.length || 0,
     totalActiveGoals: activeGoals,
-    totalCategories: catRes.data?.length || 0,
+    totalCategories: catRes?.length || 0,
     completedGoals,
     totalPoints,
     uniqueVisitors: visitors,
@@ -196,6 +196,8 @@ export async function firebaseApiFetch(
     }
   }
 
+  const conn = getActiveConnection();
+
   try {
     // ===== AUTH =====
     if (path === "/api/login" && method === "POST") {
@@ -216,19 +218,18 @@ export async function firebaseApiFetch(
 
     // ===== SETTINGS =====
     if (path === "/api/settings" && method === "GET") {
-      const { data } = await supabase
-        .from("settings")
-        .select("data")
-        .eq("id", "appearance")
-        .maybeSingle();
-      return ok((data as any)?.data || {});
+      const rows = await connSelectQuery(
+        conn,
+        "settings",
+        "select=data&id=eq.appearance",
+      ).catch(() => []);
+      return ok(rows[0]?.data || {});
     }
     if (path === "/api/settings" && method === "PUT") {
       const payload = body || {};
-      const { error } = await supabase
-        .from("settings")
-        .upsert({ id: "appearance", data: payload }, { onConflict: "id" });
-      if (error) return fail(500, error.message);
+      await connUpsertReturning(conn, "settings", [
+        { id: "appearance", data: payload },
+      ], "id");
       logAction(
         "Theme Applied",
         "Admin applied new theme and branding settings",
@@ -239,24 +240,18 @@ export async function firebaseApiFetch(
 
     // ===== STUDENTS =====
     if (path === "/api/students" && method === "GET") {
-      const { data, error } = await supabase.from("students").select("*");
-      if (error) return fail(500, error.message);
-      return ok((data || []).map(mapStudentRow));
+      const rows = await connSelect(conn, "students");
+      return ok(rows.map(mapStudentRow));
     }
     if (path === "/api/students" && method === "POST") {
       const input = mapStudentInput(body || {});
-      const { data, error } = await supabase
-        .from("students")
-        .insert(input)
-        .select()
-        .single();
-      if (error) return fail(500, error.message);
-      return ok(mapStudentRow(data));
+      const rows = await connInsertReturning(conn, "students", [input]);
+      return ok(mapStudentRow(rows[0] || input));
     }
     if (path === "/api/students/snapshot-ranks" && method === "POST") {
-      const [{ data: students }, { data: goals }] = await Promise.all([
-        supabase.from("students").select("id, assigned_goals"),
-        supabase.from("master_goals").select("id, points"),
+      const [students, goals] = await Promise.all([
+        connSelect(conn, "students"),
+        connSelect(conn, "master_goals"),
       ]);
       const map = new Map<string, number>();
       (goals || []).forEach((g: any) => map.set(g.id, g.points || 0));
@@ -272,10 +267,9 @@ export async function firebaseApiFetch(
         .sort((a: any, b: any) => b.pts - a.pts);
       await Promise.all(
         ranked.map((s: any, idx: number) =>
-          supabase
-            .from("students")
-            .update({ previous_rank: idx + 1 })
-            .eq("id", s.id),
+          connUpdate(conn, "students", `id=eq.${s.id}`, {
+            previous_rank: idx + 1,
+          }),
         ),
       );
       return ok();
@@ -285,97 +279,64 @@ export async function firebaseApiFetch(
       const id = studentMatch[1];
       if (method === "PUT") {
         const input = mapStudentInput(body || {});
-        const { data, error } = await supabase
-          .from("students")
-          .update(input)
-          .eq("id", id)
-          .select()
-          .single();
-        if (error) return fail(500, error.message);
+        const rows = await connUpdate(conn, "students", `id=eq.${id}`, input);
         logAction(
           "Student Updated",
           `Updated data/goals for student ${body?.name || id}`,
           "education",
         );
-        return ok(mapStudentRow(data));
+        return ok(mapStudentRow(rows[0] || { id, ...input }));
       }
       if (method === "DELETE") {
-        const { error } = await supabase.from("students").delete().eq("id", id);
-        if (error) return fail(500, error.message);
+        await connDeleteById(conn, "students", id);
         return ok();
       }
     }
 
     // ===== CATEGORIES =====
     if (path === "/api/categories" && method === "GET") {
-      const { data, error } = await supabase.from("categories").select("*");
-      if (error) return fail(500, error.message);
-      return ok((data || []).map(mapCategoryRow));
+      const rows = await connSelect(conn, "categories");
+      return ok(rows.map(mapCategoryRow));
     }
     if (path === "/api/categories" && method === "POST") {
       const input = mapCategoryInput(body || {});
-      const { data, error } = await supabase
-        .from("categories")
-        .insert(input)
-        .select()
-        .single();
-      if (error) return fail(500, error.message);
-      return ok(mapCategoryRow(data));
+      const rows = await connInsertReturning(conn, "categories", [input]);
+      return ok(mapCategoryRow(rows[0] || input));
     }
     const catMatch = path.match(/^\/api\/categories\/([^/]+)$/);
     if (catMatch) {
       const id = catMatch[1];
       if (method === "PUT") {
         const input = mapCategoryInput(body || {});
-        const { data, error } = await supabase
-          .from("categories")
-          .update(input)
-          .eq("id", id)
-          .select()
-          .single();
-        if (error) return fail(500, error.message);
-        return ok(mapCategoryRow(data));
+        const rows = await connUpdate(conn, "categories", `id=eq.${id}`, input);
+        return ok(mapCategoryRow(rows[0] || { id, ...input }));
       }
       if (method === "DELETE") {
-        const { error } = await supabase.from("categories").delete().eq("id", id);
-        if (error) return fail(500, error.message);
+        await connDeleteById(conn, "categories", id);
         return ok();
       }
     }
 
     // ===== MASTER GOALS =====
     if (path === "/api/masterGoals" && method === "GET") {
-      const { data, error } = await supabase.from("master_goals").select("*");
-      if (error) return fail(500, error.message);
-      return ok((data || []).map(mapGoalRow));
+      const rows = await connSelect(conn, "master_goals");
+      return ok(rows.map(mapGoalRow));
     }
     if (path === "/api/masterGoals" && method === "POST") {
       const input = mapGoalInput(body || {});
-      const { data, error } = await supabase
-        .from("master_goals")
-        .insert(input)
-        .select()
-        .single();
-      if (error) return fail(500, error.message);
-      return ok(mapGoalRow(data));
+      const rows = await connInsertReturning(conn, "master_goals", [input]);
+      return ok(mapGoalRow(rows[0] || input));
     }
     const goalMatch = path.match(/^\/api\/masterGoals\/([^/]+)$/);
     if (goalMatch) {
       const id = goalMatch[1];
       if (method === "PUT") {
         const input = mapGoalInput(body || {});
-        const { data, error } = await supabase
-          .from("master_goals")
-          .update(input)
-          .eq("id", id)
-          .select()
-          .single();
-        if (error) return fail(500, error.message);
-        return ok(mapGoalRow(data));
+        const rows = await connUpdate(conn, "master_goals", `id=eq.${id}`, input);
+        return ok(mapGoalRow(rows[0] || { id, ...input }));
       }
       if (method === "DELETE") {
-        const { error } = await supabase.from("master_goals").delete().eq("id", id);
-        if (error) return fail(500, error.message);
+        await connDeleteById(conn, "master_goals", id);
         return ok();
       }
     }
@@ -383,28 +344,24 @@ export async function firebaseApiFetch(
     // ===== TRACK VISIT =====
     if (path === "/api/track-visit" && method === "POST") {
       const today = new Date().toISOString().split("T")[0];
-      const { data: existing } = await supabase
-        .from("page_views")
-        .select("hits")
-        .eq("date", today)
-        .maybeSingle();
-      const hits = (existing?.hits || 0) + 1;
-      const { error } = await supabase
-        .from("page_views")
-        .upsert({ date: today, hits }, { onConflict: "date" });
-      if (error) return fail(500, error.message);
+      const existing = await connSelectQuery(
+        conn,
+        "page_views",
+        `select=hits&date=eq.${today}`,
+      ).catch(() => []);
+      const hits = (existing[0]?.hits || 0) + 1;
+      await connUpsertReturning(conn, "page_views", [{ date: today, hits }], "date");
       return ok();
     }
 
     // ===== LOGS =====
     if (path === "/api/logs" && method === "GET") {
-      const { data, error } = await supabase
-        .from("activity_logs")
-        .select("*")
-        .order("timestamp", { ascending: false })
-        .limit(500);
-      if (error) return fail(500, error.message);
-      return ok(data || []);
+      const rows = await connSelectQuery(
+        conn,
+        "activity_logs",
+        "select=*&order=timestamp.desc&limit=500",
+      ).catch(() => []);
+      return ok(rows);
     }
 
     // ===== STATS =====

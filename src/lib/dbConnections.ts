@@ -305,6 +305,131 @@ export async function connSelect(conn: DbConnection, table: string): Promise<any
   return data || [];
 }
 
+/**
+ * Generic select with optional PostgREST query string (e.g. "id=eq.123&select=*").
+ * Routes through edge proxy when the active key is a service_role token (which
+ * Supabase rejects when called directly from a browser).
+ */
+export async function connSelectQuery(
+  conn: DbConnection,
+  table: string,
+  query = "select=*",
+): Promise<any[]> {
+  if (getConnectionKeyType(conn) === "service_role") {
+    const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query });
+    return Array.isArray(r) ? r : [];
+  }
+  const res = await fetch(`${conn.url}/rest/v1/${table}?${query}`, {
+    headers: { ...buildRestHeaders(conn), "Accept-Profile": "public" },
+  });
+  if (!res.ok) throw new Error(`select ${table} failed: ${res.status}`);
+  return await res.json();
+}
+
+/**
+ * Update by raw PostgREST filter (e.g. "id=eq.123"). Returns updated rows.
+ */
+export async function connUpdate(
+  conn: DbConnection,
+  table: string,
+  filter: string,
+  patch: Record<string, any>,
+): Promise<any[]> {
+  if (getConnectionKeyType(conn) === "service_role") {
+    // Service-role: PATCH via proxy. Add a tiny op via callProxy.update isn't
+    // implemented, so we tunnel through the REST endpoint by reusing the
+    // proxy's authenticated forwarding via select op is not appropriate.
+    // Inline a custom REST call from the browser is blocked, so use direct
+    // fetch through the edge function's pass-through (we extend op).
+    const r = await callProxy({
+      url: conn.url,
+      key: conn.key,
+      op: "update" as any,
+      table,
+      query: filter,
+      rows: [patch],
+    });
+    return Array.isArray(r) ? r : [];
+  }
+  const res = await fetch(`${conn.url}/rest/v1/${table}?${filter}`, {
+    method: "PATCH",
+    headers: {
+      ...buildRestHeaders(conn),
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`update ${table} failed: ${res.status} ${await res.text()}`);
+  return await res.json();
+}
+
+/**
+ * Insert rows and return them (with generated ids/timestamps).
+ */
+export async function connInsertReturning(
+  conn: DbConnection,
+  table: string,
+  rows: any[],
+): Promise<any[]> {
+  if (!rows.length) return [];
+  if (getConnectionKeyType(conn) === "service_role") {
+    const r = await callProxy({
+      url: conn.url,
+      key: conn.key,
+      op: "insert",
+      table,
+      rows,
+    });
+    return Array.isArray(r?.rows) ? r.rows : Array.isArray(r) ? r : rows;
+  }
+  const res = await fetch(`${conn.url}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      ...buildRestHeaders(conn),
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error(`insert ${table} failed: ${res.status} ${await res.text()}`);
+  return await res.json();
+}
+
+/**
+ * Upsert and return the resulting rows.
+ */
+export async function connUpsertReturning(
+  conn: DbConnection,
+  table: string,
+  rows: any[],
+  onConflict = "id",
+): Promise<any[]> {
+  if (!rows.length) return [];
+  if (getConnectionKeyType(conn) === "service_role") {
+    const r = await callProxy({
+      url: conn.url,
+      key: conn.key,
+      op: "upsert",
+      table,
+      rows,
+      onConflict,
+    });
+    return Array.isArray(r?.rows) ? r.rows : Array.isArray(r) ? r : rows;
+  }
+  const res = await fetch(`${conn.url}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    method: "POST",
+    headers: {
+      ...buildRestHeaders(conn),
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=representation",
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error(`upsert ${table} failed: ${res.status} ${await res.text()}`);
+  return await res.json();
+}
+
 export async function connInsert(
   conn: DbConnection,
   table: string,
