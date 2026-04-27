@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { firebaseApiFetch } from './lib/firebaseApi';
+import {
+  TIME_RANGE,
+  TIME_RANGE_OPTIONS,
+  POINTS_CAPTION,
+  STATS_CAPTION,
+  type TimeRange,
+} from './lib/timeRanges';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -541,7 +548,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   isLoading: boolean;
   appSettings?: any;
 }) {
-   const [timeFilter, setTimeFilter] = useState<'all-time' | 'monthly' | 'weekly'>('all-time');
+  const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -565,8 +572,8 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       return goals.filter(g => {
         if (!g.completed) return false;
         
-         // "all-time" includes all completed goals regardless of date
-         if (timeFilter === 'all-time') return true;
+        // "all-time" includes all completed goals regardless of date
+        if (timeFilter === TIME_RANGE.ALL_TIME) return true;
         
         // "Monthly" and "Weekly" require completedAt to check boundaries
         if (!g.completedAt) return false;
@@ -577,10 +584,10 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
         // Robust check for invalid date
         if (isNaN(compTime)) return false;
         
-        if (timeFilter === 'monthly') {
+        if (timeFilter === TIME_RANGE.MONTHLY) {
           return compTime >= startOfMonth.getTime();
         }
-        if (timeFilter === 'weekly') {
+        if (timeFilter === TIME_RANGE.WEEKLY) {
           return compTime >= startOfWeek.getTime();
         }
         return false;
@@ -689,15 +696,15 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
           {/* HORIZONTAL TIME FILTERS */}
           <div className="flex justify-center mt-6">
             <div className="bg-base-900/30 backdrop-blur-md p-1.5 rounded-full flex items-center gap-1 overflow-x-auto no-scrollbar scrollbar-hide snap-x">
-                {['all-time', 'monthly', 'weekly'].map((filter) => (
+               {TIME_RANGE_OPTIONS.map((opt) => (
                  <button 
-                  key={filter} 
-                  onClick={() => setTimeFilter(filter as any)}
+                  key={opt.value} 
+                  onClick={() => setTimeFilter(opt.value)}
                   className={`px-5 py-2 rounded-full text-xs md:text-sm font-bold uppercase tracking-wider transition-all snap-center whitespace-nowrap active:scale-95 ${
-                    timeFilter === filter ? 'bg-base-50 text-primary-700 shadow-md' : 'text-base-50/90 hover:text-base-50 hover:bg-base-50/20'
+                    timeFilter === opt.value ? 'bg-base-50 text-primary-700 shadow-md' : 'text-base-50/90 hover:text-base-50 hover:bg-base-50/20'
                   }`}
                  >
-                   {filter}
+                   {opt.shortLabel}
                  </button>
                ))}
             </div>
@@ -945,7 +952,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
               </div>
             </div>
             <div className="flex-1 bg-primary-600 rounded-2xl p-4 shadow-lg shadow-primary-200">
-              <div className="text-[10px] font-black text-primary-200 uppercase tracking-widest mb-1">All-Time Pts</div>
+              <div className="text-[10px] font-black text-primary-200 uppercase tracking-widest mb-1">{POINTS_CAPTION.ALL_TIME}</div>
               <div className="text-2xl font-black text-base-50">{totalPoints}</div>
             </div>
           </div>
@@ -2408,10 +2415,10 @@ function AdminStatisticsTab() {
       ) : (
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="All-Time Students" value={stats?.totalStudents} icon={Users} color="text-blue-500" />
-            <StatCard title="Active Goals" value={stats?.totalActiveGoals} icon={Target} color="text-amber-500" />
-            <StatCard title="All-Time Unique Views" value={stats?.uniqueVisitors} icon={Search} color="text-emerald-500" />
-            <StatCard title="All-Time Points Distributed" value={stats?.totalPoints} icon={Trophy} color="text-purple-500" />
+            <StatCard title={STATS_CAPTION.STUDENTS} value={stats?.totalStudents} icon={Users} color="text-blue-500" />
+            <StatCard title={STATS_CAPTION.ACTIVE_GOALS} value={stats?.totalActiveGoals} icon={Target} color="text-amber-500" />
+            <StatCard title={STATS_CAPTION.UNIQUE_VIEWS} value={stats?.uniqueVisitors} icon={Search} color="text-emerald-500" />
+            <StatCard title={STATS_CAPTION.POINTS_DISTRIBUTED} value={stats?.totalPoints} icon={Trophy} color="text-purple-500" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
