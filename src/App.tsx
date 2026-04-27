@@ -696,15 +696,15 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
           {/* HORIZONTAL TIME FILTERS */}
           <div className="flex justify-center mt-6">
             <div className="bg-base-900/30 backdrop-blur-md p-1.5 rounded-full flex items-center gap-1 overflow-x-auto no-scrollbar scrollbar-hide snap-x">
-                {['all-time', 'monthly', 'weekly'].map((filter) => (
+               {TIME_RANGE_OPTIONS.map((opt) => (
                  <button 
-                  key={filter} 
-                  onClick={() => setTimeFilter(filter as any)}
+                  key={opt.value} 
+                  onClick={() => setTimeFilter(opt.value)}
                   className={`px-5 py-2 rounded-full text-xs md:text-sm font-bold uppercase tracking-wider transition-all snap-center whitespace-nowrap active:scale-95 ${
-                    timeFilter === filter ? 'bg-base-50 text-primary-700 shadow-md' : 'text-base-50/90 hover:text-base-50 hover:bg-base-50/20'
+                    timeFilter === opt.value ? 'bg-base-50 text-primary-700 shadow-md' : 'text-base-50/90 hover:text-base-50 hover:bg-base-50/20'
                   }`}
                  >
-                   {filter}
+                   {opt.shortLabel}
                  </button>
                ))}
             </div>
