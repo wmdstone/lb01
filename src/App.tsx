@@ -1269,7 +1269,8 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
               { id: 'students', label: 'Students', icon: Users },
               { id: 'goals', label: 'Tracks & Goals', icon: Target },
               { id: 'appearance', label: 'Appearance', icon: Palette },
-              { id: 'statistics', label: 'Statistics', icon: Search }
+              { id: 'statistics', label: 'Statistics', icon: Search },
+              { id: 'import-export', label: 'Import / Export', icon: Database }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1310,6 +1311,15 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
           )}
           {activeTab === 'statistics' && (
             <AdminStatisticsTab />
+          )}
+          {activeTab === 'import-export' && (
+            <AdminImportExportTab
+              apiFetch={apiFetch}
+              students={students}
+              masterGoals={masterGoals}
+              categories={categories}
+              refreshData={refreshData}
+            />
           )}
         </div>
       </div>
