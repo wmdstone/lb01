@@ -986,6 +986,73 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         </div>
       )}
 
+      <div className="bg-base-100 rounded-3xl border border-base-200 p-6 shadow-sm mb-6">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <h4 className="font-bold text-text-main flex items-center gap-2">
+            <CheckSquare className="w-5 h-5 text-accent-500" /> Activity Timeline
+          </h4>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-light">
+              <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
+                {timelineData.totalGoals} goals
+              </span>
+              <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
+                {timelineData.totalPoints} pts
+              </span>
+            </div>
+            <div className="inline-flex rounded-xl border border-base-200 bg-base-50 p-1">
+              {(['7d', '30d'] as const).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setTimelineRange(r)}
+                  className={`px-3 py-1 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                    timelineRange === r
+                      ? 'bg-primary-600 text-base-50 shadow'
+                      : 'text-text-muted hover:text-text-main'
+                  }`}
+                >
+                  {r === '7d' ? 'Last 7d' : 'Last 30d'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-text-muted mb-3">
+          Daily completed goals — useful to validate weekly &amp; monthly leaderboard rankings.
+        </p>
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={timelineData.rows}>
+              <XAxis
+                dataKey="date"
+                stroke="#888888"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                interval={timelineRange === '30d' ? 2 : 0}
+              />
+              <YAxis
+                stroke="#888888"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                width={30}
+                allowDecimals={false}
+              />
+              <RechartsTooltip
+                contentStyle={{
+                  borderRadius: '1rem',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                }}
+                formatter={(value: any, name: any) => [value, name === 'goals' ? 'Goals' : 'Points']}
+              />
+              <Bar dataKey="goals" fill="var(--theme-accent-500)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       <div className="space-y-4">
         <h2 className="text-xl font-black text-text-main flex items-center gap-2 px-2">
           <Target className="w-6 h-6 text-primary-500" /> Assignment Board
