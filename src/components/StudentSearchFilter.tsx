@@ -116,12 +116,12 @@ export function StudentSearchFilter({
 
   const isDark = variant === 'dark';
   const inputCls = isDark
-    ? 'w-full pl-12 pr-10 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 placeholder:text-base-50/60 focus:ring-4 focus:ring-base-50/10 focus:border-base-50/40 backdrop-blur-md outline-none text-sm transition-all'
-    : 'w-full pl-12 pr-10 py-3.5 rounded-2xl border border-base-200 focus:ring-4 focus:ring-primary-50/50 focus:border-primary-500 transition-all text-sm outline-none bg-base-200/50 focus:bg-base-100';
+    ? 'w-full min-h-11 pl-12 pr-10 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 placeholder:text-base-50/60 focus:ring-4 focus:ring-base-50/10 focus:border-base-50/40 backdrop-blur-md outline-none text-sm transition-all'
+    : 'w-full min-h-11 pl-12 pr-10 py-3 rounded-2xl border border-base-200 focus:ring-4 focus:ring-primary-50/50 focus:border-primary-500 transition-all text-sm outline-none bg-base-200/50 focus:bg-base-100';
   const iconCls = isDark ? 'text-base-50/70' : 'text-text-light';
   const btnCls = isDark
-    ? 'flex items-center gap-2 px-4 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 hover:bg-base-900/50 backdrop-blur-md text-sm font-bold transition-all'
-    : 'flex items-center gap-2 px-4 py-3.5 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all';
+    ? 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 hover:bg-base-900/50 backdrop-blur-md text-sm font-bold transition-all'
+    : 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all';
 
   const hasFilters = value.query || value.tags.length > 0;
 
@@ -149,8 +149,8 @@ export function StudentSearchFilter({
   };
 
   return (
-    <div className={`flex flex-col sm:flex-row gap-2 items-stretch ${className}`}>
-      <div className="relative flex-1">
+    <div className={`flex flex-col sm:flex-row gap-2 items-stretch min-w-0 ${className}`}>
+      <div className="relative flex-1 min-w-0">
         <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 ${iconCls}`} />
         <input
           type="text"
@@ -163,7 +163,7 @@ export function StudentSearchFilter({
           <button
             type="button"
             onClick={() => onChange({ ...value, query: '' })}
-            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-base-50/10 ${iconCls}`}
+            className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-base-50/10 ${iconCls}`}
             aria-label="Clear search"
           >
             <X className="h-4 w-4" />
@@ -171,9 +171,9 @@ export function StudentSearchFilter({
         )}
       </div>
 
-      <div className="relative" ref={popRef}>
+      <div className="relative flex-1 sm:flex-none min-w-0" ref={popRef}>
         <button type="button" onClick={() => setOpen((o) => !o)} className={btnCls}>
-          <Filter className="h-4 w-4" />
+          <Filter className="h-4 w-4 shrink-0" />
           <span>Tags</span>
           {value.tags.length > 0 && (
             <span className="ml-1 px-2 py-0.5 rounded-full bg-primary-600 text-base-50 text-[10px] font-black">
@@ -183,7 +183,7 @@ export function StudentSearchFilter({
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-2 w-80 bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-3">
+          <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-2rem))] bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-3">
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-text-light">
                 Filter by tags
@@ -288,7 +288,7 @@ export function StudentSearchFilter({
       </div>
 
       {value.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 items-center sm:max-w-[40%]">
+        <div className="flex flex-wrap gap-1.5 items-center w-full sm:w-auto sm:max-w-[40%] basis-full sm:basis-auto">
           {value.tags.map((tag) => (
             <span
               key={tag}

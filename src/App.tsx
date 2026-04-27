@@ -768,17 +768,21 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
       {/* REST OF STUDENTS LIST */}
       <div className="bg-base-100 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-base-200 overflow-hidden mx-0">
-        <div className="px-4 md:px-8 pt-6 pb-2 flex flex-col sm:flex-row sm:items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <StudentSearchFilter
-              value={searchFilter}
-              onChange={setSearchFilter}
-              availableTags={availableTags}
-              studentTagSource={studentTagSource}
-              placeholder="Search rank 4 and below by name..."
-            />
+        <div className="px-4 md:px-8 pt-6 pb-2">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+            <div className="flex-1 min-w-0">
+              <StudentSearchFilter
+                value={searchFilter}
+                onChange={setSearchFilter}
+                availableTags={availableTags}
+                studentTagSource={studentTagSource}
+                placeholder="Search rank 4 and below..."
+              />
+            </div>
+            <div className="shrink-0 w-full sm:w-auto">
+              <StudentSortDropdown value={sortKey} onChange={setSortKey} />
+            </div>
           </div>
-          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
         </div>
         {isLoading ? (
           <div className="p-20 flex flex-col items-center gap-4">
@@ -1261,8 +1265,8 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
 
       <div className="flex flex-col gap-6">
         {/* Scrollable Horizontal Tabs */}
-        <div className="w-[calc(100%+2rem)] -mx-4 px-4 sm:mx-0 sm:w-full sm:px-0 overflow-x-auto no-scrollbar scrollbar-hide snap-x snap-mandatory pb-3">
-          <div className="flex items-center gap-6 border-b border-base-200 min-w-max">
+        <div className="-mx-4 sm:mx-0 overflow-x-auto no-scrollbar scrollbar-hide snap-x pb-3">
+          <div className="flex items-center gap-2 sm:gap-4 border-b border-base-200 min-w-max px-4 sm:px-0">
             {[
               { id: 'students', label: 'Students', icon: Users },
               { id: 'goals', label: 'Tracks & Goals', icon: Target },
@@ -1275,13 +1279,13 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
                   if (navigator.vibrate) navigator.vibrate(50);
                   setActiveTab(tab.id);
                 }}
-                className={`group flex items-center gap-3 py-4 font-bold text-lg transition-all whitespace-nowrap active:scale-95 border-b-[3px] snap-start ${
+                className={`group flex items-center justify-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 min-h-11 font-bold text-base sm:text-lg transition-all whitespace-nowrap active:scale-95 border-b-[3px] snap-start ${
                   activeTab === tab.id 
                     ? 'border-primary-600 text-primary-600' 
                     : 'border-transparent text-text-muted hover:text-text-main'
                 }`}
               >
-                <tab.icon className={`w-6 h-6 transition-colors ${activeTab === tab.id ? 'text-primary-600' : 'text-text-light group-hover:text-text-muted'}`} />
+                <tab.icon className={`w-5 h-5 sm:w-6 sm:h-6 shrink-0 transition-colors ${activeTab === tab.id ? 'text-primary-600' : 'text-text-light group-hover:text-text-muted'}`} />
                 {tab.label}
               </button>
             ))}
@@ -1425,10 +1429,12 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
             onChange={setSearchFilter}
             availableTags={availableTags}
             studentTagSource={studentTagSource}
-            placeholder="Search students by name..."
+            placeholder="Search students..."
           />
         </div>
-        <StudentSortDropdown value={sortKey} onChange={setSortKey} />
+        <div className="shrink-0 w-full sm:w-auto">
+          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
+        </div>
       </div>
 
       <div className="space-y-3">

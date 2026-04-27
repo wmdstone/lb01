@@ -50,21 +50,21 @@ export function StudentSortDropdown({
   const isDark = variant === 'dark';
 
   const btnCls = isDark
-    ? 'flex items-center gap-2 px-4 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 hover:bg-base-900/50 backdrop-blur-md text-sm font-bold transition-all whitespace-nowrap'
-    : 'flex items-center gap-2 px-4 py-3.5 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all whitespace-nowrap';
+    ? 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 hover:bg-base-900/50 backdrop-blur-md text-sm font-bold transition-all whitespace-nowrap'
+    : 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all whitespace-nowrap';
 
   const DirIcon = current.direction === 'asc' ? ArrowUp : current.direction === 'desc' ? ArrowDown : ArrowDownUp;
 
   return (
-    <div className={`relative ${className}`} ref={ref}>
+    <div className={`relative min-w-0 ${className}`} ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)} className={btnCls}>
-        <ArrowDownUp className="h-4 w-4 opacity-70" />
+        <ArrowDownUp className="h-4 w-4 opacity-70 shrink-0" />
         <span className="hidden sm:inline">Sort:</span>
-        <span>{current.label.split(' (')[0]}</span>
-        <DirIcon className="h-3.5 w-3.5 opacity-70" />
+        <span className="truncate">{current.label.split(' (')[0]}</span>
+        <DirIcon className="h-3.5 w-3.5 opacity-70 shrink-0" />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-60 bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-2">
+        <div className="absolute right-0 mt-2 w-[min(15rem,calc(100vw-2rem))] bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-2">
           <div className="text-[10px] font-black uppercase tracking-widest text-text-light px-3 pt-1 pb-2">
             Sort by
           </div>
