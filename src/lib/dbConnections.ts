@@ -23,6 +23,8 @@ export const DB_EVENTS = {
   CHANGED: "db-connection-changed",
 };
 
+export type DbKeyType = "publishable" | "service_role" | "unknown";
+
 const DEFAULT_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "";
 const DEFAULT_KEY = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
@@ -129,12 +131,86 @@ export function removeConnection(id: string) {
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
 }
 
-export async function testConnection(conn: DbConnection): Promise<{ ok: boolean; error?: string }> {
+function decodeJwtRole(key: string): string | null {
   try {
+    const parts = key.split(".");
+    if (parts.length !== 3) return null;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4 || 4)) % 4);
+    const payload = JSON.parse(atob(padded));
+    return typeof payload?.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getConnectionKeyType(conn: Pick<DbConnection, "key">): DbKeyType {
+  const key = conn.key?.trim?.() || "";
+  if (!key) return "unknown";
+  if (key.startsWith("sb_publishable_")) return "publishable";
+  if (key.startsWith("sb_secret_")) return "service_role";
+
+  const role = decodeJwtRole(key);
+  if (role === "service_role") return "service_role";
+  if (role === "anon") return "publishable";
+  return "unknown";
+}
+
+function buildRestHeaders(conn: DbConnection, accept = "application/json") {
+  return {
+    apikey: conn.key,
+    Authorization: `Bearer ${conn.key}`,
+    Accept: accept,
+    "Accept-Profile": "public",
+  };
+}
+
+export async function listConnectionTables(
+  conn: DbConnection,
+): Promise<{ tables: string[]; error?: string }> {
+  try {
+    const res = await fetch(`${conn.url}/rest/v1/`, {
+      method: "GET",
+      headers: buildRestHeaders(conn, "application/openapi+json"),
+    });
+
+    if (!res.ok) {
+      return { tables: [], error: `${res.status} ${res.statusText}`.trim() };
+    }
+
+    const doc = await res.json();
+    const tables = Object.keys(doc?.paths || {})
+      .map((path) => path.replace(/^\//, ""))
+      .filter((path) => path && !path.startsWith("rpc/") && !path.includes("{"))
+      .sort();
+
+    return { tables };
+  } catch (e: any) {
+    return { tables: [], error: String(e?.message || e) };
+  }
+}
+
+export async function testConnection(
+  conn: DbConnection,
+  expectedTables: string[] = [],
+): Promise<{
+  ok: boolean;
+  error?: string;
+  keyType: DbKeyType;
+  tables: string[];
+  missingTables: string[];
+}> {
+  const keyType = getConnectionKeyType(conn);
+  try {
+    const openApi = await listConnectionTables(conn);
+    if (!openApi.error) {
+      const missingTables = expectedTables.filter((table) => !openApi.tables.includes(table));
+      return { ok: true, keyType, tables: openApi.tables, missingTables };
+    }
+
     const client = getClientFor(conn);
     const { error } = await client.from("_lovable_probe_does_not_exist").select("*").limit(1);
-    // A "table not found" / 42P01 / PGRST205 means the connection itself works.
-    if (!error) return { ok: true };
+    if (!error) return { ok: true, keyType, tables: [], missingTables: expectedTables };
     const msg = error.message || "";
     const code = (error as any).code || "";
     if (
@@ -142,11 +218,17 @@ export async function testConnection(conn: DbConnection): Promise<{ ok: boolean;
       code === "PGRST205" ||
       /not.*find|does not exist|relation/i.test(msg)
     ) {
-      return { ok: true };
+      return { ok: true, keyType, tables: [], missingTables: expectedTables };
     }
-    return { ok: false, error: msg };
+    return { ok: false, error: msg, keyType, tables: [], missingTables: expectedTables };
   } catch (e: any) {
-    return { ok: false, error: String(e?.message || e) };
+    return {
+      ok: false,
+      error: String(e?.message || e),
+      keyType,
+      tables: [],
+      missingTables: expectedTables,
+    };
   }
 }
 

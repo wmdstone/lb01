@@ -23,10 +23,12 @@ import {
   updateConnection,
   removeConnection,
   testConnection,
+  getConnectionKeyType,
   getClientFor,
   DEFAULT_CONNECTION_ID,
   DB_EVENTS,
   type DbConnection,
+  type DbKeyType,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
@@ -38,6 +40,19 @@ const APP_TABLES = [
   "settings",
   "app_events",
 ];
+
+type ConnectionTestState = {
+  message: string;
+  ok: boolean;
+  keyType?: DbKeyType;
+  missingTables?: string[];
+};
+
+const describeKeyType = (keyType?: DbKeyType) => {
+  if (keyType === "service_role") return "service-role key";
+  if (keyType === "publishable") return "publishable key";
+  return "unknown key type";
+};
 
 type Props = {
   refreshData: () => Promise<void> | void;
@@ -126,7 +141,7 @@ function ConnectionsSection({
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
 
   const handleSwitch = async (id: string) => {
     if (id === activeId) return;
@@ -136,10 +151,21 @@ function ConnectionsSection({
 
   const handleTest = async (conn: DbConnection) => {
     setTesting(conn.id);
-    const r = await testConnection(conn);
+    const r = await testConnection(conn, APP_TABLES);
+    const keyTypeLabel = describeKeyType(r.keyType);
+    const summary = r.ok
+      ? r.missingTables.length
+        ? `Connected via ${keyTypeLabel} — missing app tables: ${r.missingTables.join(", ")}`
+        : `Connected via ${keyTypeLabel}`
+      : `Failed (${keyTypeLabel}): ${r.error || "Connection error"}`;
     setTestResult((prev) => ({
       ...prev,
-      [conn.id]: r.ok ? "✓ Connected" : `✗ ${r.error || "Failed"}`,
+      [conn.id]: {
+        message: summary,
+        ok: r.ok,
+        keyType: r.keyType,
+        missingTables: r.missingTables,
+      },
     }));
     setTesting(null);
   };
@@ -204,10 +230,10 @@ function ConnectionsSection({
                   {testResult[c.id] && (
                     <p
                       className={`text-xs mt-1 font-bold ${
-                        testResult[c.id].startsWith("✓") ? "text-emerald-600" : "text-red-600"
+                        testResult[c.id].ok ? "text-emerald-600" : "text-red-600"
                       }`}
                     >
-                      {testResult[c.id]}
+                      {testResult[c.id].message}
                     </p>
                   )}
                 </div>
@@ -696,6 +722,15 @@ function TransferSection({
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 
+  const source = useMemo(
+    () => connections.find((c) => c.id === sourceId) || connections[0],
+    [connections, sourceId],
+  );
+  const dest = useMemo(
+    () => connections.find((c) => c.id === destId) || connections[0],
+    [connections, destId],
+  );
+
   const toggleTable = (t: string) =>
     setTables((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
 
@@ -711,14 +746,46 @@ function TransferSection({
     if (mode === "replace") {
       if (!confirm(`This will DELETE all rows in [${tables.join(", ")}] on the destination. Continue?`)) return;
     }
-    const source = connections.find((c) => c.id === sourceId)!;
-    const dest = connections.find((c) => c.id === destId)!;
+    if (!source || !dest) {
+      alert("Choose both source and destination connections.");
+      return;
+    }
     const sClient = getClientFor(source);
     const dClient = getClientFor(dest);
+    const destKeyType = getConnectionKeyType(dest);
 
     setBusy(true);
     setLog([]);
     const append = (m: string) => setLog((l) => [...l, m]);
+
+    const destTest = await testConnection(dest, tables);
+    append(`Destination: ${dest.label}`);
+    append(`Key type: ${describeKeyType(destKeyType)}`);
+
+    if (!destTest.ok) {
+      append(`✗ Destination connection failed: ${destTest.error || "Unknown error"}`);
+      setBusy(false);
+      return;
+    }
+
+    if (destKeyType !== "service_role") {
+      append(
+        "✗ Destination key is not a service-role key. Use a service-role key to create, replace, or fully sync data.",
+      );
+      setBusy(false);
+      return;
+    }
+
+    if (destTest.missingTables.length) {
+      append(
+        `✗ Destination is missing required tables: ${destTest.missingTables.join(", ")}`,
+      );
+      append(
+        "Create the same schema in the destination project first, then retry the transfer.",
+      );
+      setBusy(false);
+      return;
+    }
 
     for (const t of tables) {
       try {
@@ -828,6 +895,10 @@ function TransferSection({
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
         Push data
       </button>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+        Transfer only works when the destination project already has the same tables and uses a service-role key.
+      </div>
 
       {log.length > 0 && (
         <pre className="bg-base-100 border border-base-200 rounded-xl p-3 text-[11px] font-mono text-text-main max-h-72 overflow-auto whitespace-pre-wrap">
