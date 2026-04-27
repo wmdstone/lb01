@@ -570,6 +570,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   appSettings?: any;
 }) {
   const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
+  const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -656,7 +657,17 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   }, [students, masterGoals, calculateTotalPoints, timeFilter]);
 
   const top3 = [sortedStudents[1], sortedStudents[0], sortedStudents[2]];
-  const restOfStudents = sortedStudents.slice(3);
+  const restOfStudentsRaw = sortedStudents.slice(3);
+  const restOfStudents = useMemo(
+    () => applyStudentSearchFilter(restOfStudentsRaw, searchFilter),
+    [restOfStudentsRaw, searchFilter]
+  );
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    (students || []).forEach((s) => (s.tags || []).forEach((t) => t && set.add(t)));
+    return Array.from(set);
+  }, [students]);
+  const hasActiveFilter = !!(searchFilter.query || searchFilter.tags.length > 0);
 
   // Mocking "My Rank": User yang sedang login (Demo purpose, taking first student)
   const currentLoggedInStudentId = students[0]?.id;
