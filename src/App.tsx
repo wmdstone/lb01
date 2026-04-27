@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { firebaseApiFetch } from './lib/firebaseApi';
 import { trackEvent, setAnalyticsAdminFlag } from './lib/analytics';
+import { supabase } from './integrations/supabase/client';
 import {
   TIME_RANGE,
   TIME_RANGE_OPTIONS,
