@@ -288,7 +288,7 @@ export function StudentSearchFilter({
       </div>
 
       {value.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 items-center sm:max-w-[40%]">
+        <div className="flex flex-wrap gap-1.5 items-center w-full sm:w-auto sm:max-w-[40%] basis-full sm:basis-auto">
           {value.tags.map((tag) => (
             <span
               key={tag}
