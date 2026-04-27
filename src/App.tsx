@@ -1500,6 +1500,57 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
     }));
   };
 
+  // ── Bulk track-scoped actions ──────────────────────────────────────────────
+  // Operate on whatever is currently visible in the goal list (respects the
+  // "All Tracks" / specific-track filter at the top of the panel).
+  const visibleGoalIds: string[] = displayedMasterGoals.map((mg: any) => mg.id);
+  const visibleAssignedCount = visibleGoalIds.filter(id => isAssigned(id)).length;
+  const visibleCompletedCount = visibleGoalIds.filter(id => isCompleted(id)).length;
+  const allVisibleAssigned = visibleGoalIds.length > 0 && visibleAssignedCount === visibleGoalIds.length;
+  const allVisibleCompleted = visibleAssignedCount > 0 && visibleCompletedCount === visibleAssignedCount;
+  const scopeLabel = filterCat === 'ALL'
+    ? 'all tracks'
+    : (categories.find((c: any) => c.id === filterCat)?.name || 'this track');
+
+  const bulkSetAssigned = (assign: boolean) => {
+    setFormData(prev => {
+      if (assign) {
+        const existingIds = new Set(prev.assignedGoals.map(ag => ag.goalId));
+        const additions = visibleGoalIds
+          .filter(id => !existingIds.has(id))
+          .map(id => ({ goalId: id, completed: false }));
+        if (additions.length === 0) return prev;
+        return { ...prev, assignedGoals: [...prev.assignedGoals, ...additions] };
+      }
+      // Unassign: drop everything in scope (also clears their completion).
+      const drop = new Set(visibleGoalIds);
+      return { ...prev, assignedGoals: prev.assignedGoals.filter(ag => !drop.has(ag.goalId)) };
+    });
+  };
+
+  const bulkSetCompleted = (complete: boolean) => {
+    setFormData(prev => {
+      const scope = new Set(visibleGoalIds);
+      const nowIso = new Date().toISOString();
+      let next = prev.assignedGoals.map(ag => {
+        if (!scope.has(ag.goalId)) return ag;
+        if (complete) {
+          return ag.completed ? ag : { ...ag, completed: true, completedAt: ag.completedAt || nowIso };
+        }
+        return { ...ag, completed: false, completedAt: undefined };
+      });
+      // When marking complete, auto-assign any visible goals that weren't yet assigned.
+      if (complete) {
+        const existingIds = new Set(next.map(ag => ag.goalId));
+        const additions = visibleGoalIds
+          .filter(id => !existingIds.has(id))
+          .map(id => ({ goalId: id, completed: true, completedAt: nowIso }));
+        if (additions.length) next = [...next, ...additions];
+      }
+      return { ...prev, assignedGoals: next };
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-base-900/60 backdrop-blur-md z-[60] flex justify-center items-center p-4">
        <motion.div 
