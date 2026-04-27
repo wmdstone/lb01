@@ -141,7 +141,7 @@ function ConnectionsSection({
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<DbConnection | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<Record<string, ConnectionTestState>>({});
 
   const handleSwitch = async (id: string) => {
     if (id === activeId) return;
@@ -151,10 +151,21 @@ function ConnectionsSection({
 
   const handleTest = async (conn: DbConnection) => {
     setTesting(conn.id);
-    const r = await testConnection(conn);
+    const r = await testConnection(conn, APP_TABLES);
+    const keyTypeLabel = describeKeyType(r.keyType);
+    const summary = r.ok
+      ? r.missingTables.length
+        ? `Connected via ${keyTypeLabel} — missing app tables: ${r.missingTables.join(", ")}`
+        : `Connected via ${keyTypeLabel}`
+      : `Failed (${keyTypeLabel}): ${r.error || "Connection error"}`;
     setTestResult((prev) => ({
       ...prev,
-      [conn.id]: r.ok ? "✓ Connected" : `✗ ${r.error || "Failed"}`,
+      [conn.id]: {
+        message: summary,
+        ok: r.ok,
+        keyType: r.keyType,
+        missingTables: r.missingTables,
+      },
     }));
     setTesting(null);
   };
@@ -219,10 +230,10 @@ function ConnectionsSection({
                   {testResult[c.id] && (
                     <p
                       className={`text-xs mt-1 font-bold ${
-                        testResult[c.id].startsWith("✓") ? "text-emerald-600" : "text-red-600"
+                        testResult[c.id].ok ? "text-emerald-600" : "text-red-600"
                       }`}
                     >
-                      {testResult[c.id]}
+                      {testResult[c.id].message}
                     </p>
                   )}
                 </div>
