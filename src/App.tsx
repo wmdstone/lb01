@@ -18,6 +18,7 @@ import {
   type StudentSearchFilterValue,
 } from './components/StudentSearchFilter';
 import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
+import { StudentSearchAdvanced } from './components/StudentSearchAdvanced';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -769,20 +770,15 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       {/* REST OF STUDENTS LIST */}
       <div className="bg-base-100 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-base-200 overflow-hidden mx-0">
         <div className="px-4 md:px-8 pt-6 pb-2">
-          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <StudentSearchFilter
-                value={searchFilter}
-                onChange={setSearchFilter}
-                availableTags={availableTags}
-                studentTagSource={studentTagSource}
-                placeholder="Search rank 4 and below..."
-              />
-            </div>
-            <div className="shrink-0 w-full sm:w-auto">
-              <StudentSortDropdown value={sortKey} onChange={setSortKey} />
-            </div>
-          </div>
+          <StudentSearchAdvanced
+            value={searchFilter}
+            onChange={setSearchFilter}
+            sortKey={sortKey}
+            onSortChange={setSortKey}
+            availableTags={availableTags}
+            studentTagSource={studentTagSource}
+            placeholder="Search rank 4 and below..."
+          />
         </div>
         {isLoading ? (
           <div className="p-20 flex flex-col items-center gap-4">
@@ -1422,19 +1418,16 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <StudentSearchFilter
-            value={searchFilter}
-            onChange={setSearchFilter}
-            availableTags={availableTags}
-            studentTagSource={studentTagSource}
-            placeholder="Search students..."
-          />
-        </div>
-        <div className="shrink-0 w-full sm:w-auto">
-          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
-        </div>
+      <div className="mb-6">
+        <StudentSearchAdvanced
+          value={searchFilter}
+          onChange={setSearchFilter}
+          sortKey={sortKey}
+          onSortChange={setSortKey}
+          availableTags={availableTags}
+          studentTagSource={studentTagSource}
+          placeholder="Search students..."
+        />
       </div>
 
       <div className="space-y-3">
