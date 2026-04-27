@@ -573,6 +573,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 }) {
   const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
+  const [sortKey, setSortKey] = useState<SortKey>('points');
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -660,15 +661,21 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
   const top3 = [sortedStudents[1], sortedStudents[0], sortedStudents[2]];
   const restOfStudentsRaw = sortedStudents.slice(3);
-  const restOfStudents = useMemo(
-    () => applyStudentSearchFilter(restOfStudentsRaw, searchFilter),
-    [restOfStudentsRaw, searchFilter]
-  );
+  const restOfStudents = useMemo(() => {
+    const filtered = applyStudentSearchFilter(restOfStudentsRaw, searchFilter);
+    // Default leaderboard ordering is points-desc and is already produced upstream;
+    // only re-sort when the user picks a different key.
+    return sortKey === 'points' ? filtered : sortStudents(filtered, sortKey);
+  }, [restOfStudentsRaw, searchFilter, sortKey]);
   const availableTags = useMemo(() => {
     const set = new Set<string>();
     (students || []).forEach((s) => (s.tags || []).forEach((t) => t && set.add(t)));
     return Array.from(set);
   }, [students]);
+  const studentTagSource = useMemo(
+    () => (students || []).map((s) => s.tags || []),
+    [students]
+  );
   const hasActiveFilter = !!(searchFilter.query || searchFilter.tags.length > 0);
 
   // Mocking "My Rank": User yang sedang login (Demo purpose, taking first student)
