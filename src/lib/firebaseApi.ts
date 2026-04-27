@@ -269,9 +269,9 @@ export async function firebaseApiFetch(
           );
           return { id: s.id, pts };
         })
-        .sort((a, b) => b.pts - a.pts);
+        .sort((a: any, b: any) => b.pts - a.pts);
       await Promise.all(
-        ranked.map((s, idx) =>
+        ranked.map((s: any, idx: number) =>
           supabase
             .from("students")
             .update({ previous_rank: idx + 1 })
