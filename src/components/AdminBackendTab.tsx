@@ -901,18 +901,53 @@ function TransferSection({
         </div>
       </div>
 
-      <button
-        onClick={run}
-        disabled={busy}
-        className="w-full sm:w-auto bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 disabled:opacity-60 active:scale-95 transition-all"
-      >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
-        Push data
-      </button>
-
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        Transfer only works when the destination project already has the same tables and uses a service-role key.
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={run}
+          disabled={busy || bootstrapBusy}
+          className="bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 disabled:opacity-60 active:scale-95 transition-all"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+          Push data
+        </button>
+        <button
+          onClick={bootstrap}
+          disabled={busy || bootstrapBusy}
+          className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-60 active:scale-95 transition-all"
+        >
+          {bootstrapBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+          Bootstrap schema on destination
+        </button>
+        <button
+          onClick={() => setShowHelp((v) => !v)}
+          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-base-200 text-text-main hover:bg-base-200/80"
+        >
+          {showHelp ? "Hide help" : "Help"}
+        </button>
       </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+        <p>
+          Service-role keys are routed through a server-side proxy (Supabase blocks them in the
+          browser). The destination must have the same tables — use <b>Bootstrap schema</b> to
+          create them automatically.
+        </p>
+      </div>
+
+      {showHelp && (
+        <div className="rounded-xl border border-base-200 bg-base-100 p-4 text-xs space-y-2">
+          <p className="font-bold text-text-main">One-time setup for a new destination project</p>
+          <ol className="list-decimal pl-5 space-y-1 text-text-muted">
+            <li>Open the destination Supabase project → <b>SQL editor</b>.</li>
+            <li>Paste and run the snippet below (creates a helper that lets this app run schema SQL).</li>
+            <li>Come back here and click <b>Bootstrap schema on destination</b>.</li>
+            <li>Then click <b>Push data</b>.</li>
+          </ol>
+          <pre className="bg-base-200/60 rounded-lg p-2 overflow-auto text-[11px] font-mono whitespace-pre-wrap">
+{EXEC_SQL_BOOTSTRAP}
+          </pre>
+        </div>
+      )}
 
       {log.length > 0 && (
         <pre className="bg-base-100 border border-base-200 rounded-xl p-3 text-[11px] font-mono text-text-main max-h-72 overflow-auto whitespace-pre-wrap">
