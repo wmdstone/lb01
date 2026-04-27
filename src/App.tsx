@@ -2415,10 +2415,10 @@ function AdminStatisticsTab() {
       ) : (
         <div className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard title="All-Time Students" value={stats?.totalStudents} icon={Users} color="text-blue-500" />
-            <StatCard title="Active Goals" value={stats?.totalActiveGoals} icon={Target} color="text-amber-500" />
-            <StatCard title="All-Time Unique Views" value={stats?.uniqueVisitors} icon={Search} color="text-emerald-500" />
-            <StatCard title="All-Time Points Distributed" value={stats?.totalPoints} icon={Trophy} color="text-purple-500" />
+            <StatCard title={STATS_CAPTION.STUDENTS} value={stats?.totalStudents} icon={Users} color="text-blue-500" />
+            <StatCard title={STATS_CAPTION.ACTIVE_GOALS} value={stats?.totalActiveGoals} icon={Target} color="text-amber-500" />
+            <StatCard title={STATS_CAPTION.UNIQUE_VIEWS} value={stats?.uniqueVisitors} icon={Search} color="text-emerald-500" />
+            <StatCard title={STATS_CAPTION.POINTS_DISTRIBUTED} value={stats?.totalPoints} icon={Trophy} color="text-purple-500" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
