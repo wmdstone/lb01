@@ -748,8 +748,6 @@ function TransferSection({
       alert("Choose both source and destination connections.");
       return;
     }
-    const sClient = getClientFor(source);
-    const dClient = getClientFor(dest);
     const destKeyType = getConnectionKeyType(dest);
 
     setBusy(true);
@@ -779,7 +777,7 @@ function TransferSection({
         `✗ Destination is missing required tables: ${destTest.missingTables.join(", ")}`,
       );
       append(
-        "Create the same schema in the destination project first, then retry the transfer.",
+        'Click "Bootstrap schema on destination" below to create them automatically (one-time setup required — see help).',
       );
       setBusy(false);
       return;
@@ -788,23 +786,15 @@ function TransferSection({
     for (const t of tables) {
       try {
         append(`→ ${t}: reading from ${source.label}…`);
-        const { data, error } = await sClient.from(t).select("*");
-        if (error) throw error;
-        const rows = data || [];
+        const rows = await connSelect(source, t);
         append(`   ${rows.length} row(s) fetched.`);
         if (mode === "replace") {
           append(`   wiping destination…`);
-          const { error: delErr } = await dClient.from(t).delete().not("id", "is", null);
-          if (delErr) throw delErr;
+          await connDeleteAll(dest, t);
         }
         if (rows.length) {
           append(`   ${mode === "upsert" ? "upserting" : "inserting"} into ${dest.label}…`);
-          const op =
-            mode === "upsert"
-              ? dClient.from(t).upsert(rows, { onConflict: "id" })
-              : dClient.from(t).insert(rows);
-          const { error: wErr } = await op;
-          if (wErr) throw wErr;
+          await connInsert(dest, t, rows, { upsert: mode === "upsert", onConflict: "id" });
         }
         append(`✓ ${t} done.`);
       } catch (e: any) {
@@ -813,6 +803,32 @@ function TransferSection({
     }
     setBusy(false);
     await onTransferred();
+  };
+
+  const [bootstrapBusy, setBootstrapBusy] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const bootstrap = async () => {
+    if (!dest) return;
+    if (getConnectionKeyType(dest) !== "service_role") {
+      alert("Destination must use a service-role key.");
+      return;
+    }
+    setBootstrapBusy(true);
+    setLog([]);
+    const append = (m: string) => setLog((l) => [...l, m]);
+    append(`Bootstrapping schema on ${dest.label}…`);
+    try {
+      await callProxy({ url: dest.url, key: dest.key, op: "exec_sql", sql: APP_SCHEMA_SQL });
+      append("✓ Tables created (or already existed).");
+      append("Now retry the transfer.");
+    } catch (e: any) {
+      append(`✗ Schema bootstrap failed: ${e?.message || e}`);
+      append("If the error mentions exec_sql, paste the SQL helper from the Help panel into the destination project's SQL editor first.");
+      setShowHelp(true);
+    } finally {
+      setBootstrapBusy(false);
+    }
   };
 
   return (
