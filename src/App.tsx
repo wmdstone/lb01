@@ -316,6 +316,15 @@ export default function App() {
     refreshData();
   }, []);
 
+  // When the user switches the active database (Lovable Cloud ↔ external
+  // Supabase) we must immediately reload all app data so the UI reflects the
+  // newly-selected backend instead of stale rows from the previous one.
+  useEffect(() => {
+    const handler = () => { refreshData(); };
+    window.addEventListener('db-connection-changed', handler);
+    return () => window.removeEventListener('db-connection-changed', handler);
+  }, []);
+
   const calculateTotalPoints = useCallback((assignedGoals: AssignedGoal[]) => {
     if (!assignedGoals || !masterGoals) return 0;
     return assignedGoals.reduce((total, assigned) => {
