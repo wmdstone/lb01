@@ -713,7 +713,10 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
                {TIME_RANGE_OPTIONS.map((opt) => (
                  <button 
                   key={opt.value} 
-                  onClick={() => setTimeFilter(opt.value)}
+                  onClick={() => {
+                    setTimeFilter(opt.value);
+                    trackEvent('leaderboard_filter', { metadata: { range: opt.value } });
+                  }}
                   className={`px-5 py-2 rounded-full text-xs md:text-sm font-bold uppercase tracking-wider transition-all snap-center whitespace-nowrap active:scale-95 ${
                     timeFilter === opt.value ? 'bg-base-50 text-primary-700 shadow-md' : 'text-base-50/90 hover:text-base-50 hover:bg-base-50/20'
                   }`}
