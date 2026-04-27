@@ -21,6 +21,13 @@ interface Props {
   studentTagSource?: string[][];
   /** Max number of quick-select chips to display. Defaults to 6. */
   maxQuickChips?: number;
+  /**
+   * Render mode:
+   * - 'full' (default): search input + tags popover + selected-tag chips
+   * - 'search': only the search input (basic mode)
+   * - 'tags': only the tags popover + selected chips (advanced mode)
+   */
+  mode?: 'full' | 'search' | 'tags';
 }
 
 /**
@@ -36,6 +43,7 @@ export function StudentSearchFilter({
   variant = 'light',
   studentTagSource,
   maxQuickChips = 6,
+  mode = 'full',
 }: Props) {
   const [open, setOpen] = useState(false);
   const [tagQuery, setTagQuery] = useState('');
@@ -150,6 +158,7 @@ export function StudentSearchFilter({
 
   return (
     <div className={`flex flex-col sm:flex-row gap-2 items-stretch min-w-0 ${className}`}>
+      {mode !== 'tags' && (
       <div className="relative flex-1 min-w-0">
         <Search className={`absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 ${iconCls}`} />
         <input
@@ -170,7 +179,9 @@ export function StudentSearchFilter({
           </button>
         )}
       </div>
+      )}
 
+      {mode !== 'search' && (
       <div className="relative flex-1 sm:flex-none min-w-0" ref={popRef}>
         <button type="button" onClick={() => setOpen((o) => !o)} className={btnCls}>
           <Filter className="h-4 w-4 shrink-0" />
@@ -286,8 +297,9 @@ export function StudentSearchFilter({
           </div>
         )}
       </div>
+      )}
 
-      {value.tags.length > 0 && (
+      {mode !== 'search' && value.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 items-center w-full sm:w-auto sm:max-w-[40%] basis-full sm:basis-auto">
           {value.tags.map((tag) => (
             <span
