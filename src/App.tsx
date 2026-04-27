@@ -7,6 +7,8 @@ import {
   STATS_CAPTION,
   type TimeRange,
 } from './lib/timeRanges';
+import { isWithinRange, type DateRange } from './lib/timeRanges';
+import { TimeRangeFilter, createDefaultTimeRangeValue, type TimeRangeValue } from './components/TimeRangeFilter';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
