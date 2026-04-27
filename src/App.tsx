@@ -1,5 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { firebaseApiFetch } from './lib/firebaseApi';
+import {
+  TIME_RANGE,
+  TIME_RANGE_OPTIONS,
+  POINTS_CAPTION,
+  STATS_CAPTION,
+  type TimeRange,
+} from './lib/timeRanges';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
