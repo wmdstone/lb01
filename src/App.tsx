@@ -229,6 +229,7 @@ export default function App() {
         if (!res.ok) throw new Error("Auth check failed");
         const data = await res.json();
         setIsAdmin(!!data.authenticated);
+        setAnalyticsAdminFlag(!!data.authenticated);
       } catch (err) {
         console.error("Auth check error:", err);
         setIsAdmin(false);
