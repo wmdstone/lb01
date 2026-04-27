@@ -1418,19 +1418,16 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <StudentSearchFilter
-            value={searchFilter}
-            onChange={setSearchFilter}
-            availableTags={availableTags}
-            studentTagSource={studentTagSource}
-            placeholder="Search students..."
-          />
-        </div>
-        <div className="shrink-0 w-full sm:w-auto">
-          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
-        </div>
+      <div className="mb-6">
+        <StudentSearchAdvanced
+          value={searchFilter}
+          onChange={setSearchFilter}
+          sortKey={sortKey}
+          onSortChange={setSortKey}
+          availableTags={availableTags}
+          studentTagSource={studentTagSource}
+          placeholder="Search students..."
+        />
       </div>
 
       <div className="space-y-3">
