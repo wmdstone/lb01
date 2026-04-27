@@ -1319,6 +1319,7 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
 
 function AdminStudentsTab({ students, refreshData, masterGoals, categories, calculateTotalPoints }: any) {
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
+  const [sortKey, setSortKey] = useState<SortKey>('name');
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   
@@ -1330,10 +1331,19 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
     studentsList.forEach((s: any) => (s.tags || []).forEach((t: string) => t && set.add(t)));
     return Array.from(set);
   }, [studentsList]);
-  const filtered = useMemo(
-    () => applyStudentSearchFilter(studentsList, searchFilter),
-    [studentsList, searchFilter]
+  const studentTagSource = useMemo(
+    () => studentsList.map((s: any) => s.tags || []),
+    [studentsList]
   );
+  const filtered = useMemo(() => {
+    const matched = applyStudentSearchFilter(studentsList, searchFilter);
+    // Precompute totalPoints so 'points' sort works against the live goal data.
+    const enriched = matched.map((s: any) => ({
+      ...s,
+      totalPoints: calculateTotalPoints(s.assignedGoals || []),
+    }));
+    return sortStudents(enriched, sortKey);
+  }, [studentsList, searchFilter, sortKey, calculateTotalPoints]);
 
   const handleSave = async (formData: any) => {
     // 1. Calculate old ranks for all students
@@ -1408,13 +1418,17 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="mb-6">
-        <StudentSearchFilter
-          value={searchFilter}
-          onChange={setSearchFilter}
-          availableTags={availableTags}
-          placeholder="Search students by name..."
-        />
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <StudentSearchFilter
+            value={searchFilter}
+            onChange={setSearchFilter}
+            availableTags={availableTags}
+            studentTagSource={studentTagSource}
+            placeholder="Search students by name..."
+          />
+        </div>
+        <StudentSortDropdown value={sortKey} onChange={setSortKey} />
       </div>
 
       <div className="space-y-3">
