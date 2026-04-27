@@ -1627,6 +1627,46 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
               </select>
             </div>
 
+            {/* Bulk actions for the current track scope */}
+            {visibleGoalIds.length > 0 && (
+              <div className="mb-4 p-3 rounded-2xl bg-base-50 border border-base-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-text-light">
+                  Bulk on <span className="text-primary-600">{scopeLabel}</span>
+                  <span className="ml-2 normal-case tracking-normal font-bold text-text-muted">
+                    · {visibleAssignedCount}/{visibleGoalIds.length} assigned · {visibleCompletedCount} completed
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => bulkSetAssigned(!allVisibleAssigned)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
+                      allVisibleAssigned
+                        ? 'bg-base-200 text-text-muted hover:bg-base-300'
+                        : 'bg-primary-600 text-base-50 hover:bg-primary-700'
+                    }`}
+                    title={allVisibleAssigned ? 'Unassign all visible' : 'Assign all visible'}
+                  >
+                    {allVisibleAssigned ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                    {allVisibleAssigned ? 'Unassign all' : 'Assign all'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bulkSetCompleted(!allVisibleCompleted)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
+                      allVisibleCompleted
+                        ? 'bg-base-200 text-text-muted hover:bg-base-300'
+                        : 'bg-accent-500 text-base-50 hover:bg-accent-600'
+                    }`}
+                    title={allVisibleCompleted ? 'Unmark all completed' : 'Mark all completed'}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {allVisibleCompleted ? 'Unmark all' : 'Mark all done'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3 pb-4">
               {displayedMasterGoals.map((mg: any, index: number) => {
                 const assigned = isAssigned(mg.id);
