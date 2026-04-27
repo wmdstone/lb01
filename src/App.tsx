@@ -2477,6 +2477,8 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
           </div>
         </div>
       )}
+
+      <AppAnalyticsPanel />
     </div>
   );
 }
