@@ -2,7 +2,20 @@
 // Keeps the exact same /api/* contract App.tsx expects, so no UI code had to change.
 // (Filename kept for backwards-compat with existing imports.)
 
-import { supabase } from "@/integrations/supabase/client";
+import { getActiveClient } from "@/lib/dbConnections";
+
+// Always resolve the currently-active database client (default Lovable Cloud
+// or a user-selected external Supabase project).
+const supabase: any = new Proxy(
+  {},
+  {
+    get(_t, prop) {
+      const client = getActiveClient() as any;
+      const value = client[prop];
+      return typeof value === "function" ? value.bind(client) : value;
+    },
+  },
+);
 
 // --- Admin password (presentation-level, matches original AI Studio behavior) ---
 const ADMIN_PASSWORD = "janki_app";
@@ -256,9 +269,9 @@ export async function firebaseApiFetch(
           );
           return { id: s.id, pts };
         })
-        .sort((a, b) => b.pts - a.pts);
+        .sort((a: any, b: any) => b.pts - a.pts);
       await Promise.all(
-        ranked.map((s, idx) =>
+        ranked.map((s: any, idx: number) =>
           supabase
             .from("students")
             .update({ previous_rank: idx + 1 })

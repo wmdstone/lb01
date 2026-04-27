@@ -20,13 +20,14 @@ import {
 import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
 import { StudentSearchAdvanced } from './components/StudentSearchAdvanced';
 import { AdminImportExportTab } from './components/AdminImportExportTab';
+import { AdminBackendTab } from './components/AdminBackendTab';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
   Target, FolderTree, Info, CheckSquare, Square, LogIn, LogOut, Loader2,
   Home, User as UserIcon, LayoutDashboard, MoreHorizontal, ArrowUp, ArrowDown,
   Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut,
-  Database
+  Database, Server
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -1270,7 +1271,8 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
               { id: 'goals', label: 'Tracks & Goals', icon: Target },
               { id: 'appearance', label: 'Appearance', icon: Palette },
               { id: 'statistics', label: 'Statistics', icon: Search },
-              { id: 'import-export', label: 'Import / Export', icon: Database }
+              { id: 'import-export', label: 'Import / Export', icon: Database },
+              { id: 'backend', label: 'Backend & DB', icon: Server }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1320,6 +1322,9 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
               categories={categories}
               refreshData={refreshData}
             />
+          )}
+          {activeTab === 'backend' && (
+            <AdminBackendTab refreshData={refreshData} />
           )}
         </div>
       </div>
