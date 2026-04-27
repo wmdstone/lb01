@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      app_events: {
+        Row: {
+          created_at: string
+          device: string
+          event_type: string
+          id: string
+          is_admin: boolean
+          metadata: Json
+          path: string | null
+          ref_id: string | null
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          device?: string
+          event_type: string
+          id?: string
+          is_admin?: boolean
+          metadata?: Json
+          path?: string | null
+          ref_id?: string | null
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          device?: string
+          event_type?: string
+          id?: string
+          is_admin?: boolean
+          metadata?: Json
+          path?: string | null
+          ref_id?: string | null
+          session_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
