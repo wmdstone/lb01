@@ -790,6 +790,48 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
   const student = students.find(s => s.id === studentId);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [historyFilter, setHistoryFilter] = useState<'hours' | 'days' | 'weeks' | 'months' | 'years'>('days');
+  const [timelineRange, setTimelineRange] = useState<'7d' | '30d'>('7d');
+
+  const timelineData = React.useMemo(() => {
+    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
+    const days = timelineRange === '7d' ? 7 : 30;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+
+    // Build a date->{goals,points} map keyed by YYYY-MM-DD
+    const map = new Map<string, { goals: number; points: number }>();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      map.set(key, { goals: 0, points: 0 });
+    }
+
+    let totalGoals = 0;
+    let totalPoints = 0;
+    student.assignedGoals.forEach(g => {
+      if (!g.completed || !g.completedAt) return;
+      const cd = new Date(g.completedAt);
+      const key = cd.toISOString().slice(0, 10);
+      if (!map.has(key)) return;
+      const mg = masterGoals.find(m => m.id === g.goalId);
+      const pts = mg?.points || 0;
+      const cur = map.get(key)!;
+      cur.goals += 1;
+      cur.points += pts;
+      totalGoals += 1;
+      totalPoints += pts;
+    });
+
+    const rows = Array.from(map.entries()).map(([date, v]) => {
+      const d = new Date(date);
+      const label = timelineRange === '7d'
+        ? d.toLocaleDateString(undefined, { weekday: 'short' })
+        : `${d.getMonth() + 1}/${d.getDate()}`;
+      return { date: label, goals: v.goals, points: v.points };
+    });
+    return { rows, totalGoals, totalPoints };
+  }, [student?.assignedGoals, masterGoals, timelineRange]);
 
   const historicalData = React.useMemo(() => {
     if (!student?.assignedGoals || student.assignedGoals.length === 0) return [];
