@@ -168,6 +168,15 @@ function buildRestHeaders(conn: DbConnection, accept = "application/json") {
 export async function listConnectionTables(
   conn: DbConnection,
 ): Promise<{ tables: string[]; error?: string }> {
+  // Service-role keys are blocked in the browser. Use the edge proxy.
+  if (getConnectionKeyType(conn) === "service_role") {
+    try {
+      const r = await callProxy({ url: conn.url, key: conn.key, op: "list_tables" });
+      return { tables: r.tables || [] };
+    } catch (e: any) {
+      return { tables: [], error: String(e?.message || e) };
+    }
+  }
   try {
     const res = await fetch(`${conn.url}/rest/v1/`, {
       method: "GET",
@@ -207,6 +216,16 @@ export async function testConnection(
       const missingTables = expectedTables.filter((table) => !openApi.tables.includes(table));
       return { ok: true, keyType, tables: openApi.tables, missingTables };
     }
+    // For service-role keys we cannot fall back to the JS client (browser blocked).
+    if (keyType === "service_role") {
+      return {
+        ok: false,
+        error: openApi.error || "Proxy unreachable",
+        keyType,
+        tables: [],
+        missingTables: expectedTables,
+      };
+    }
 
     const client = getClientFor(conn);
     const { error } = await client.from("_lovable_probe_does_not_exist").select("*").limit(1);
@@ -233,3 +252,194 @@ export async function testConnection(
 }
 
 export const DEFAULT_CONNECTION_ID = DEFAULT_ID;
+
+// ---------- Edge-function proxy for service-role operations ----------
+// Service-role (sb_secret_*) keys are rejected by Supabase if used from a
+// browser origin. We route those calls through our own edge function which
+// runs server-side and forwards them safely.
+
+const PROXY_URL = `${DEFAULT_URL}/functions/v1/db-proxy`;
+
+export async function callProxy(payload: {
+  url: string;
+  key: string;
+  op: "list_tables" | "select" | "insert" | "upsert" | "delete" | "exec_sql";
+  table?: string;
+  query?: string;
+  rows?: any[];
+  onConflict?: string;
+  sql?: string;
+}): Promise<any> {
+  const res = await fetch(PROXY_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: DEFAULT_KEY,
+      Authorization: `Bearer ${DEFAULT_KEY}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+  if (!res.ok) {
+    throw new Error(data?.error || `Proxy ${res.status}: ${text || res.statusText}`);
+  }
+  return data;
+}
+
+// Helper used by the Transfer + CRUD UI to perform reads/writes against any
+// connection, automatically choosing direct JS client (publishable keys) or
+// the proxy (service-role keys).
+export async function connSelect(conn: DbConnection, table: string): Promise<any[]> {
+  if (getConnectionKeyType(conn) === "service_role") {
+    const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query: "select=*" });
+    return Array.isArray(r) ? r : [];
+  }
+  const { data, error } = await getClientFor(conn).from(table).select("*").limit(10000);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function connInsert(
+  conn: DbConnection,
+  table: string,
+  rows: any[],
+  opts?: { upsert?: boolean; onConflict?: string },
+): Promise<void> {
+  if (!rows.length) return;
+  if (getConnectionKeyType(conn) === "service_role") {
+    await callProxy({
+      url: conn.url,
+      key: conn.key,
+      op: opts?.upsert ? "upsert" : "insert",
+      table,
+      rows,
+      onConflict: opts?.onConflict || "id",
+    });
+    return;
+  }
+  const c = getClientFor(conn);
+  const op = opts?.upsert
+    ? c.from(table).upsert(rows, { onConflict: opts?.onConflict || "id" })
+    : c.from(table).insert(rows);
+  const { error } = await op;
+  if (error) throw error;
+}
+
+export async function connDeleteAll(conn: DbConnection, table: string): Promise<void> {
+  if (getConnectionKeyType(conn) === "service_role") {
+    await callProxy({ url: conn.url, key: conn.key, op: "delete", table, query: "id=not.is.null" });
+    return;
+  }
+  const { error } = await getClientFor(conn).from(table).delete().not("id", "is", null);
+  if (error) throw error;
+}
+
+export async function connDeleteById(conn: DbConnection, table: string, id: string): Promise<void> {
+  if (getConnectionKeyType(conn) === "service_role") {
+    await callProxy({
+      url: conn.url,
+      key: conn.key,
+      op: "delete",
+      table,
+      query: `id=eq.${encodeURIComponent(id)}`,
+    });
+    return;
+  }
+  const { error } = await getClientFor(conn).from(table).delete().eq("id", id);
+  if (error) throw error;
+}
+
+// SQL used to bootstrap the destination project with the same tables the
+// app expects. Safe to re-run (CREATE IF NOT EXISTS + RLS guard).
+export const APP_SCHEMA_SQL = `
+create table if not exists public.students (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  photo text default '',
+  bio text default '',
+  total_points integer default 0,
+  previous_rank integer,
+  assigned_goals jsonb not null default '[]'::jsonb,
+  tags text[] default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.master_goals (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text default '',
+  points integer not null default 0,
+  category_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  type text not null default 'system',
+  action text not null,
+  details text default '',
+  timestamp timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+create table if not exists public.page_views (
+  date date primary key,
+  hits integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.settings (
+  id text primary key,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+create table if not exists public.app_events (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  path text,
+  device text not null default 'desktop',
+  is_admin boolean not null default false,
+  session_id text not null,
+  ref_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+do $$ begin
+  perform 1;
+  -- Enable RLS + public policies so the publishable key can also read/write.
+  execute 'alter table public.students enable row level security';
+  execute 'alter table public.master_goals enable row level security';
+  execute 'alter table public.categories enable row level security';
+  execute 'alter table public.activity_logs enable row level security';
+  execute 'alter table public.page_views enable row level security';
+  execute 'alter table public.settings enable row level security';
+  execute 'alter table public.app_events enable row level security';
+exception when others then null; end $$;
+do $$ declare t text; begin
+  for t in select unnest(array['students','master_goals','categories','activity_logs','page_views','settings','app_events']) loop
+    begin execute format('create policy "Public read %1$s" on public.%1$I for select using (true)', t); exception when duplicate_object then null; end;
+    begin execute format('create policy "Public insert %1$s" on public.%1$I for insert with check (true)', t); exception when duplicate_object then null; end;
+    begin execute format('create policy "Public update %1$s" on public.%1$I for update using (true)', t); exception when duplicate_object then null; end;
+    begin execute format('create policy "Public delete %1$s" on public.%1$I for delete using (true)', t); exception when duplicate_object then null; end;
+  end loop;
+end $$;
+`;
+
+// SQL helper that the user must paste once into the destination's SQL editor
+// to enable exec_sql calls from this app. Returned to the UI for copy/paste.
+export const EXEC_SQL_BOOTSTRAP = `create or replace function public.exec_sql(sql text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$ begin execute sql; end; $$;`;
