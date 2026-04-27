@@ -15,6 +15,9 @@
 
 import { corsHeaders } from "@supabase/supabase-js/cors";
 
+// deno-lint-ignore no-explicit-any
+declare const Deno: any;
+
 type Body = {
   url: string;
   key: string;
