@@ -1429,10 +1429,12 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
             onChange={setSearchFilter}
             availableTags={availableTags}
             studentTagSource={studentTagSource}
-            placeholder="Search students by name..."
+            placeholder="Search students..."
           />
         </div>
-        <StudentSortDropdown value={sortKey} onChange={setSortKey} />
+        <div className="shrink-0 w-full sm:w-auto">
+          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
+        </div>
       </div>
 
       <div className="space-y-3">
