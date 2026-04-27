@@ -29,6 +29,13 @@ import {
   DB_EVENTS,
   type DbConnection,
   type DbKeyType,
+  connSelect,
+  connInsert,
+  connDeleteAll,
+  connDeleteById,
+  callProxy,
+  APP_SCHEMA_SQL,
+  EXEC_SQL_BOOTSTRAP,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
@@ -451,10 +458,7 @@ function CrudSection({
     setLoading(true);
     setError(null);
     try {
-      const client = getClientFor(conn);
-      const { data, error } = await client.from(effectiveTable).select("*").limit(200);
-      if (error) throw error;
-      const list = data || [];
+      const list = await connSelect(conn, effectiveTable);
       setRows(list);
       const cols = new Set<string>();
       list.forEach((r: any) => Object.keys(r).forEach((k) => cols.add(k)));
@@ -476,36 +480,30 @@ function CrudSection({
   const handleDelete = async (row: any) => {
     if (!conn || !row.id) return;
     if (!confirm("Delete this row?")) return;
-    const client = getClientFor(conn);
-    const { error } = await client.from(effectiveTable).delete().eq("id", row.id);
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      await connDeleteById(conn, effectiveTable, row.id);
+      await load();
+      if (conn.id === activeId) await onChanged();
+    } catch (e: any) {
+      alert(e?.message || String(e));
     }
-    await load();
-    if (conn.id === activeId) await onChanged();
   };
 
   const handleSave = async (payload: any, isNew: boolean) => {
     if (!conn) return;
-    const client = getClientFor(conn);
-    if (isNew) {
-      const { error } = await client.from(effectiveTable).insert(payload);
-      if (error) {
-        alert(error.message);
-        return;
+    try {
+      if (isNew) {
+        await connInsert(conn, effectiveTable, [payload]);
+      } else {
+        // Update via upsert by id (works for both publishable + service-role).
+        await connInsert(conn, effectiveTable, [payload], { upsert: true, onConflict: "id" });
       }
-    } else {
-      const { id, ...rest } = payload;
-      const { error } = await client.from(effectiveTable).update(rest).eq("id", id);
-      if (error) {
-        alert(error.message);
-        return;
-      }
+      setEditing(null);
+      await load();
+      if (conn.id === activeId) await onChanged();
+    } catch (e: any) {
+      alert(e?.message || String(e));
     }
-    setEditing(null);
-    await load();
-    if (conn.id === activeId) await onChanged();
   };
 
   return (
@@ -750,8 +748,6 @@ function TransferSection({
       alert("Choose both source and destination connections.");
       return;
     }
-    const sClient = getClientFor(source);
-    const dClient = getClientFor(dest);
     const destKeyType = getConnectionKeyType(dest);
 
     setBusy(true);
@@ -781,7 +777,7 @@ function TransferSection({
         `✗ Destination is missing required tables: ${destTest.missingTables.join(", ")}`,
       );
       append(
-        "Create the same schema in the destination project first, then retry the transfer.",
+        'Click "Bootstrap schema on destination" below to create them automatically (one-time setup required — see help).',
       );
       setBusy(false);
       return;
@@ -790,23 +786,15 @@ function TransferSection({
     for (const t of tables) {
       try {
         append(`→ ${t}: reading from ${source.label}…`);
-        const { data, error } = await sClient.from(t).select("*");
-        if (error) throw error;
-        const rows = data || [];
+        const rows = await connSelect(source, t);
         append(`   ${rows.length} row(s) fetched.`);
         if (mode === "replace") {
           append(`   wiping destination…`);
-          const { error: delErr } = await dClient.from(t).delete().not("id", "is", null);
-          if (delErr) throw delErr;
+          await connDeleteAll(dest, t);
         }
         if (rows.length) {
           append(`   ${mode === "upsert" ? "upserting" : "inserting"} into ${dest.label}…`);
-          const op =
-            mode === "upsert"
-              ? dClient.from(t).upsert(rows, { onConflict: "id" })
-              : dClient.from(t).insert(rows);
-          const { error: wErr } = await op;
-          if (wErr) throw wErr;
+          await connInsert(dest, t, rows, { upsert: mode === "upsert", onConflict: "id" });
         }
         append(`✓ ${t} done.`);
       } catch (e: any) {
@@ -815,6 +803,32 @@ function TransferSection({
     }
     setBusy(false);
     await onTransferred();
+  };
+
+  const [bootstrapBusy, setBootstrapBusy] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const bootstrap = async () => {
+    if (!dest) return;
+    if (getConnectionKeyType(dest) !== "service_role") {
+      alert("Destination must use a service-role key.");
+      return;
+    }
+    setBootstrapBusy(true);
+    setLog([]);
+    const append = (m: string) => setLog((l) => [...l, m]);
+    append(`Bootstrapping schema on ${dest.label}…`);
+    try {
+      await callProxy({ url: dest.url, key: dest.key, op: "exec_sql", sql: APP_SCHEMA_SQL });
+      append("✓ Tables created (or already existed).");
+      append("Now retry the transfer.");
+    } catch (e: any) {
+      append(`✗ Schema bootstrap failed: ${e?.message || e}`);
+      append("If the error mentions exec_sql, paste the SQL helper from the Help panel into the destination project's SQL editor first.");
+      setShowHelp(true);
+    } finally {
+      setBootstrapBusy(false);
+    }
   };
 
   return (
@@ -887,18 +901,53 @@ function TransferSection({
         </div>
       </div>
 
-      <button
-        onClick={run}
-        disabled={busy}
-        className="w-full sm:w-auto bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 disabled:opacity-60 active:scale-95 transition-all"
-      >
-        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
-        Push data
-      </button>
-
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        Transfer only works when the destination project already has the same tables and uses a service-role key.
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={run}
+          disabled={busy || bootstrapBusy}
+          className="bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-primary-700 disabled:opacity-60 active:scale-95 transition-all"
+        >
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
+          Push data
+        </button>
+        <button
+          onClick={bootstrap}
+          disabled={busy || bootstrapBusy}
+          className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-60 active:scale-95 transition-all"
+        >
+          {bootstrapBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+          Bootstrap schema on destination
+        </button>
+        <button
+          onClick={() => setShowHelp((v) => !v)}
+          className="px-4 py-2.5 rounded-xl text-sm font-bold bg-base-200 text-text-main hover:bg-base-200/80"
+        >
+          {showHelp ? "Hide help" : "Help"}
+        </button>
       </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1">
+        <p>
+          Service-role keys are routed through a server-side proxy (Supabase blocks them in the
+          browser). The destination must have the same tables — use <b>Bootstrap schema</b> to
+          create them automatically.
+        </p>
+      </div>
+
+      {showHelp && (
+        <div className="rounded-xl border border-base-200 bg-base-100 p-4 text-xs space-y-2">
+          <p className="font-bold text-text-main">One-time setup for a new destination project</p>
+          <ol className="list-decimal pl-5 space-y-1 text-text-muted">
+            <li>Open the destination Supabase project → <b>SQL editor</b>.</li>
+            <li>Paste and run the snippet below (creates a helper that lets this app run schema SQL).</li>
+            <li>Come back here and click <b>Bootstrap schema on destination</b>.</li>
+            <li>Then click <b>Push data</b>.</li>
+          </ol>
+          <pre className="bg-base-200/60 rounded-lg p-2 overflow-auto text-[11px] font-mono whitespace-pre-wrap">
+{EXEC_SQL_BOOTSTRAP}
+          </pre>
+        </div>
+      )}
 
       {log.length > 0 && (
         <pre className="bg-base-100 border border-base-200 rounded-xl p-3 text-[11px] font-mono text-text-main max-h-72 overflow-auto whitespace-pre-wrap">
