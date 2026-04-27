@@ -17,6 +17,7 @@ import {
   emptyStudentSearchFilter,
   type StudentSearchFilterValue,
 } from './components/StudentSearchFilter';
+import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
