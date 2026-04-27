@@ -23,10 +23,12 @@ import {
   updateConnection,
   removeConnection,
   testConnection,
+  getConnectionKeyType,
   getClientFor,
   DEFAULT_CONNECTION_ID,
   DB_EVENTS,
   type DbConnection,
+  type DbKeyType,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
@@ -38,6 +40,19 @@ const APP_TABLES = [
   "settings",
   "app_events",
 ];
+
+type ConnectionTestState = {
+  message: string;
+  ok: boolean;
+  keyType?: DbKeyType;
+  missingTables?: string[];
+};
+
+const describeKeyType = (keyType?: DbKeyType) => {
+  if (keyType === "service_role") return "service-role key";
+  if (keyType === "publishable") return "publishable key";
+  return "unknown key type";
+};
 
 type Props = {
   refreshData: () => Promise<void> | void;
