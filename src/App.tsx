@@ -856,9 +856,9 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 
   const historicalData = React.useMemo(() => {
     if (!student?.assignedGoals || student.assignedGoals.length === 0) return [];
-    
-    // Some older completed goals might not have completedAt. 
-    // We space them out hourly backwards from now so they show up beautifully on the chart.
+
+    // Some older completed goals might not have completedAt.
+    // Space them out hourly backwards from now so they show up beautifully on the chart.
     const now = Date.now();
     const zeroCount = student.assignedGoals.filter(g => g.completed && !g.completedAt).length;
     let baseTime = now - (zeroCount * 3600000);
@@ -875,42 +875,56 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         return g;
       });
 
+    // Filter to active range; pick chart granularity automatically based on span.
+    const range: DateRange = historyFilterValue.range;
+    const inRange = completedGoals.filter(g => isWithinRange(g.timestamp, range));
+
+    // Determine the visible span so we can choose label granularity.
+    const firstTs = inRange[0]?.timestamp ?? completedGoals[0]?.timestamp ?? Date.now();
+    const lastTs  = inRange[inRange.length - 1]?.timestamp ?? completedGoals[completedGoals.length - 1]?.timestamp ?? Date.now();
+    const spanStart = range.start ? range.start.getTime() : firstTs;
+    const spanEnd   = range.end ? range.end.getTime() : lastTs;
+    const spanDays = Math.max(1, (spanEnd - spanStart) / 86400000);
+
+    type Granularity = 'hours' | 'days' | 'weeks' | 'months' | 'years';
+    const granularity: Granularity =
+      spanDays <= 2     ? 'hours'  :
+      spanDays <= 60    ? 'days'   :
+      spanDays <= 180   ? 'weeks'  :
+      spanDays <= 1095  ? 'months' :
+                          'years';
+
+    const labelFor = (date: Date): string => {
+      if (granularity === 'hours')  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
+      if (granularity === 'days')   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)}`;
+      if (granularity === 'weeks') {
+        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+        const pastDays = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+        const weekNumber = Math.ceil((pastDays + firstDayOfYear.getDay() + 1) / 7);
+        return `W${weekNumber} ${date.getFullYear()}`;
+      }
+      if (granularity === 'months') {
+        const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return `${m[date.getMonth()]} '${date.getFullYear().toString().slice(-2)}`;
+      }
+      return `${date.getFullYear()}`;
+    };
+
+    // Cumulative running total across goals in range.
     let runningTotal = 0;
-    const historyMap = new Map();
-    
-    completedGoals.forEach(g => {
+    const historyMap = new Map<string, number>();
+    inRange.forEach(g => {
       const mg = masterGoals.find(m => m.id === g.goalId);
       runningTotal += (mg?.points || 0);
-
-      let dateStr = 'Unknown';
-      if (g.timestamp > 0) {
-        const date = new Date(g.timestamp);
-        if (historyFilter === 'hours') {
-          dateStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:00`;
-        } else if (historyFilter === 'days') {
-          dateStr = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)}`;
-        } else if (historyFilter === 'weeks') {
-          const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-          const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-          const weekNumber = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-          dateStr = `W${weekNumber} ${date.getFullYear()}`;
-        } else if (historyFilter === 'months') {
-          const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          dateStr = `${monthNames[date.getMonth()]} '${date.getFullYear().toString().slice(-2)}`;
-        } else if (historyFilter === 'years') {
-          dateStr = `${date.getFullYear()}`;
-        }
-      }
-      
-      historyMap.set(dateStr, runningTotal);
+      historyMap.set(labelFor(new Date(g.timestamp)), runningTotal);
     });
 
     const data = Array.from(historyMap.entries()).map(([date, points]) => ({ date, points }));
     if (data.length > 0 && data[0].points > 0) {
-       data.unshift({ date: 'Start', points: 0 });
+      data.unshift({ date: 'Start', points: 0 });
     }
     return data;
-  }, [student?.assignedGoals, masterGoals, historyFilter]);
+  }, [student?.assignedGoals, masterGoals, historyFilterValue]);
 
   if (!student) return <div className="text-center py-20 font-bold text-text-light underline cursor-pointer" onClick={() => navigateTo('/')}>Go Back Home</div>;
 
