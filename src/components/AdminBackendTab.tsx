@@ -458,10 +458,7 @@ function CrudSection({
     setLoading(true);
     setError(null);
     try {
-      const client = getClientFor(conn);
-      const { data, error } = await client.from(effectiveTable).select("*").limit(200);
-      if (error) throw error;
-      const list = data || [];
+      const list = await connSelect(conn, effectiveTable);
       setRows(list);
       const cols = new Set<string>();
       list.forEach((r: any) => Object.keys(r).forEach((k) => cols.add(k)));
@@ -483,36 +480,30 @@ function CrudSection({
   const handleDelete = async (row: any) => {
     if (!conn || !row.id) return;
     if (!confirm("Delete this row?")) return;
-    const client = getClientFor(conn);
-    const { error } = await client.from(effectiveTable).delete().eq("id", row.id);
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      await connDeleteById(conn, effectiveTable, row.id);
+      await load();
+      if (conn.id === activeId) await onChanged();
+    } catch (e: any) {
+      alert(e?.message || String(e));
     }
-    await load();
-    if (conn.id === activeId) await onChanged();
   };
 
   const handleSave = async (payload: any, isNew: boolean) => {
     if (!conn) return;
-    const client = getClientFor(conn);
-    if (isNew) {
-      const { error } = await client.from(effectiveTable).insert(payload);
-      if (error) {
-        alert(error.message);
-        return;
+    try {
+      if (isNew) {
+        await connInsert(conn, effectiveTable, [payload]);
+      } else {
+        // Update via upsert by id (works for both publishable + service-role).
+        await connInsert(conn, effectiveTable, [payload], { upsert: true, onConflict: "id" });
       }
-    } else {
-      const { id, ...rest } = payload;
-      const { error } = await client.from(effectiveTable).update(rest).eq("id", id);
-      if (error) {
-        alert(error.message);
-        return;
-      }
+      setEditing(null);
+      await load();
+      if (conn.id === activeId) await onChanged();
+    } catch (e: any) {
+      alert(e?.message || String(e));
     }
-    setEditing(null);
-    await load();
-    if (conn.id === activeId) await onChanged();
   };
 
   return (
