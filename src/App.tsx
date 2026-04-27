@@ -798,8 +798,9 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 }) {
   const student = students.find(s => s.id === studentId);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [historyFilter, setHistoryFilter] = useState<'hours' | 'days' | 'weeks' | 'months' | 'years'>('days');
-  const [timelineRange, setTimelineRange] = useState<'7d' | '30d'>('7d');
+  // Both charts now share the same reusable TimeRangeFilter (preset + date range).
+  const [historyFilterValue, setHistoryFilterValue] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('all-time'));
+  const [timelineFilterValue, setTimelineFilterValue] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
 
   const timelineData = React.useMemo(() => {
     if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
