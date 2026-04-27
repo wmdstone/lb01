@@ -7,6 +7,8 @@ import {
   STATS_CAPTION,
   type TimeRange,
 } from './lib/timeRanges';
+import { isWithinRange, type DateRange } from './lib/timeRanges';
+import { TimeRangeFilter, createDefaultTimeRangeValue, type TimeRangeValue } from './components/TimeRangeFilter';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -796,14 +798,26 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 }) {
   const student = students.find(s => s.id === studentId);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const [historyFilter, setHistoryFilter] = useState<'hours' | 'days' | 'weeks' | 'months' | 'years'>('days');
-  const [timelineRange, setTimelineRange] = useState<'7d' | '30d'>('7d');
+  // Both charts now share the same reusable TimeRangeFilter (preset + date range).
+  const [historyFilterValue, setHistoryFilterValue] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('all-time'));
+  const [timelineFilterValue, setTimelineFilterValue] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
 
   const timelineData = React.useMemo(() => {
-    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
-    const days = timelineRange === '7d' ? 7 : 30;
+    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0, days: 0 };
+    // Resolve the active range. Unbounded sides fall back to the goal data extents.
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+    const completedTs = student.assignedGoals
+      .filter(g => g.completed && g.completedAt)
+      .map(g => new Date(g.completedAt!).getTime())
+      .filter(t => !isNaN(t));
+    const minTs = completedTs.length ? Math.min(...completedTs) : now.getTime();
+    const startDate = timelineFilterValue.range.start ?? new Date(minTs);
+    const endDate = timelineFilterValue.range.end ?? now;
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    const dayMs = 86400000;
+    const days = Math.max(1, Math.min(366, Math.round((end.getTime() - start.getTime()) / dayMs) + 1));
+    const compact = days > 14;
 
     // Build a date->{goals,points} map keyed by YYYY-MM-DD
     const map = new Map<string, { goals: number; points: number }>();
@@ -832,19 +846,19 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 
     const rows = Array.from(map.entries()).map(([date, v]) => {
       const d = new Date(date);
-      const label = timelineRange === '7d'
-        ? d.toLocaleDateString(undefined, { weekday: 'short' })
-        : `${d.getMonth() + 1}/${d.getDate()}`;
+      const label = compact
+        ? `${d.getMonth() + 1}/${d.getDate()}`
+        : d.toLocaleDateString(undefined, { weekday: 'short' });
       return { date: label, goals: v.goals, points: v.points };
     });
-    return { rows, totalGoals, totalPoints };
-  }, [student?.assignedGoals, masterGoals, timelineRange]);
+    return { rows, totalGoals, totalPoints, days };
+  }, [student?.assignedGoals, masterGoals, timelineFilterValue]);
 
   const historicalData = React.useMemo(() => {
     if (!student?.assignedGoals || student.assignedGoals.length === 0) return [];
-    
-    // Some older completed goals might not have completedAt. 
-    // We space them out hourly backwards from now so they show up beautifully on the chart.
+
+    // Some older completed goals might not have completedAt.
+    // Space them out hourly backwards from now so they show up beautifully on the chart.
     const now = Date.now();
     const zeroCount = student.assignedGoals.filter(g => g.completed && !g.completedAt).length;
     let baseTime = now - (zeroCount * 3600000);
@@ -861,42 +875,56 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         return g;
       });
 
+    // Filter to active range; pick chart granularity automatically based on span.
+    const range: DateRange = historyFilterValue.range;
+    const inRange = completedGoals.filter(g => isWithinRange(g.timestamp, range));
+
+    // Determine the visible span so we can choose label granularity.
+    const firstTs = inRange[0]?.timestamp ?? completedGoals[0]?.timestamp ?? Date.now();
+    const lastTs  = inRange[inRange.length - 1]?.timestamp ?? completedGoals[completedGoals.length - 1]?.timestamp ?? Date.now();
+    const spanStart = range.start ? range.start.getTime() : firstTs;
+    const spanEnd   = range.end ? range.end.getTime() : lastTs;
+    const spanDays = Math.max(1, (spanEnd - spanStart) / 86400000);
+
+    type Granularity = 'hours' | 'days' | 'weeks' | 'months' | 'years';
+    const granularity: Granularity =
+      spanDays <= 2     ? 'hours'  :
+      spanDays <= 60    ? 'days'   :
+      spanDays <= 180   ? 'weeks'  :
+      spanDays <= 1095  ? 'months' :
+                          'years';
+
+    const labelFor = (date: Date): string => {
+      if (granularity === 'hours')  return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:00`;
+      if (granularity === 'days')   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)}`;
+      if (granularity === 'weeks') {
+        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+        const pastDays = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+        const weekNumber = Math.ceil((pastDays + firstDayOfYear.getDay() + 1) / 7);
+        return `W${weekNumber} ${date.getFullYear()}`;
+      }
+      if (granularity === 'months') {
+        const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return `${m[date.getMonth()]} '${date.getFullYear().toString().slice(-2)}`;
+      }
+      return `${date.getFullYear()}`;
+    };
+
+    // Cumulative running total across goals in range.
     let runningTotal = 0;
-    const historyMap = new Map();
-    
-    completedGoals.forEach(g => {
+    const historyMap = new Map<string, number>();
+    inRange.forEach(g => {
       const mg = masterGoals.find(m => m.id === g.goalId);
       runningTotal += (mg?.points || 0);
-
-      let dateStr = 'Unknown';
-      if (g.timestamp > 0) {
-        const date = new Date(g.timestamp);
-        if (historyFilter === 'hours') {
-          dateStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2,'0')}:00`;
-        } else if (historyFilter === 'days') {
-          dateStr = `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear().toString().slice(-2)}`;
-        } else if (historyFilter === 'weeks') {
-          const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-          const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-          const weekNumber = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-          dateStr = `W${weekNumber} ${date.getFullYear()}`;
-        } else if (historyFilter === 'months') {
-          const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-          dateStr = `${monthNames[date.getMonth()]} '${date.getFullYear().toString().slice(-2)}`;
-        } else if (historyFilter === 'years') {
-          dateStr = `${date.getFullYear()}`;
-        }
-      }
-      
-      historyMap.set(dateStr, runningTotal);
+      historyMap.set(labelFor(new Date(g.timestamp)), runningTotal);
     });
 
     const data = Array.from(historyMap.entries()).map(([date, points]) => ({ date, points }));
     if (data.length > 0 && data[0].points > 0) {
-       data.unshift({ date: 'Start', points: 0 });
+      data.unshift({ date: 'Start', points: 0 });
     }
     return data;
-  }, [student?.assignedGoals, masterGoals, historyFilter]);
+  }, [student?.assignedGoals, masterGoals, historyFilterValue]);
 
   if (!student) return <div className="text-center py-20 font-bold text-text-light underline cursor-pointer" onClick={() => navigateTo('/')}>Go Back Home</div>;
 
@@ -959,23 +987,13 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         </div>
       </div>
 
-      {historicalData.length > 1 && (
+      {historicalData.length > 0 && (
         <div className="bg-base-100 rounded-3xl border border-base-200 p-6 shadow-sm mb-6">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <h4 className="font-bold text-text-main flex items-center gap-2">
               <Target className="w-5 h-5 text-primary-500" /> Progression History
             </h4>
-            <select
-              value={historyFilter}
-              onChange={(e: any) => setHistoryFilter(e.target.value)}
-              className="bg-base-50 border border-base-200 rounded-xl px-3 py-1.5 text-xs font-bold text-text-muted focus:ring-2 focus:ring-primary-100 outline-none"
-            >
-              <option value="hours">Hours</option>
-              <option value="days">Days</option>
-              <option value="weeks">Weeks</option>
-              <option value="months">Months</option>
-              <option value="years">Years</option>
-            </select>
+            <TimeRangeFilter value={historyFilterValue} onChange={setHistoryFilterValue} />
           </div>
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -998,7 +1016,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
           <h4 className="font-bold text-text-main flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-accent-500" /> Activity Timeline
           </h4>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-light">
               <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
                 {timelineData.totalGoals} goals
@@ -1007,21 +1025,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
                 {timelineData.totalPoints} pts
               </span>
             </div>
-            <div className="inline-flex rounded-xl border border-base-200 bg-base-50 p-1">
-              {(['7d', '30d'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setTimelineRange(r)}
-                  className={`px-3 py-1 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                    timelineRange === r
-                      ? 'bg-primary-600 text-base-50 shadow'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  {r === '7d' ? 'Last 7d' : 'Last 30d'}
-                </button>
-              ))}
-            </div>
+            <TimeRangeFilter value={timelineFilterValue} onChange={setTimelineFilterValue} />
           </div>
         </div>
         <p className="text-xs text-text-muted mb-3">
@@ -1036,7 +1040,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
-                interval={timelineRange === '30d' ? 2 : 0}
+                interval={timelineData.days > 14 ? Math.ceil(timelineData.days / 10) : 0}
               />
               <YAxis
                 stroke="#888888"
@@ -2364,7 +2368,8 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
   );
 }
 function AdminStatisticsTab() {
-  const [range, setRange] = useState('1w');
+  // Reusable shared filter (preset + date range picker).
+  const [filter, setFilter] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
   const [stats, setStats] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2373,8 +2378,23 @@ function AdminStatisticsTab() {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // Map shared preset → legacy `range=` param the API understands.
+        // Custom range takes precedence via from/to ISO params.
+        const presetMap: Record<string, string> = {
+          'last-week':  '1w',
+          'last-month': '1m',
+          'last-year':  '1y',
+          'all-time':   'all',
+          'custom':     'all',
+        };
+        const params = new URLSearchParams();
+        params.set('range', presetMap[filter.preset] || 'all');
+        if (filter.preset === 'custom') {
+          if (filter.range.start) params.set('from', filter.range.start.toISOString());
+          if (filter.range.end)   params.set('to',   filter.range.end.toISOString());
+        }
         const [statsRes, logsRes] = await Promise.all([
-          apiFetch(`/api/stats?range=${range}`),
+          apiFetch(`/api/stats?${params.toString()}`),
           apiFetch('/api/logs')
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
@@ -2389,7 +2409,7 @@ function AdminStatisticsTab() {
       }
     };
     fetchData();
-  }, [range]);
+  }, [filter]);
 
   return (
     <div className="p-8">
@@ -2397,17 +2417,7 @@ function AdminStatisticsTab() {
         <h3 className="text-2xl font-black text-text-main underline decoration-primary-500 decoration-4 underline-offset-8">
           Dashboard Statistics & Logging
         </h3>
-        <select 
-          value={range} 
-          onChange={e => setRange(e.target.value)}
-          className="bg-base-100 border border-base-200 rounded-xl px-4 py-2 font-bold text-sm focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="today">Today</option>
-          <option value="1w">Last 7 Days</option>
-          <option value="1m">Last 1 Month</option>
-          <option value="1y">Last 1 Year</option>
-          <option value="all">Historical Data</option>
-        </select>
+        <TimeRangeFilter value={filter} onChange={setFilter} size="md" />
       </div>
 
       {loading ? (

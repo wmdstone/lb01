@@ -84,21 +84,29 @@ const logAction = async (
   }
 };
 
-// --- Stats (matches original server.ts behavior) ---
-const computeStats = async (range: string) => {
+// --- Stats (matches original server.ts behavior, plus custom date ranges) ---
+const computeStats = async (range: string, from?: string | null, to?: string | null) => {
   const now = new Date();
   let cutoff = new Date(0);
-  if (range === "today") cutoff = new Date(new Date().setHours(0, 0, 0, 0));
-  if (range === "1w") cutoff = new Date(now.getTime() - 7 * 86400000);
-  if (range === "1m") {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - 1);
-    cutoff = d;
-  }
-  if (range === "1y") {
-    const d = new Date(now);
-    d.setFullYear(d.getFullYear() - 1);
-    cutoff = d;
+  let endCutoff: Date | null = null;
+
+  if (from || to) {
+    // Custom range — overrides preset.
+    cutoff = from ? new Date(from) : new Date(0);
+    endCutoff = to ? new Date(to) : null;
+  } else {
+    if (range === "today") cutoff = new Date(new Date().setHours(0, 0, 0, 0));
+    if (range === "1w") cutoff = new Date(now.getTime() - 7 * 86400000);
+    if (range === "1m") {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      cutoff = d;
+    }
+    if (range === "1y") {
+      const d = new Date(now);
+      d.setFullYear(d.getFullYear() - 1);
+      cutoff = d;
+    }
   }
 
   const [studentsRes, catRes, goalsRes, viewsRes] = await Promise.all([
@@ -122,7 +130,7 @@ const computeStats = async (range: string) => {
       activeGoals++;
       if (g.completed && g.completedAt) {
         const d = new Date(g.completedAt);
-        if (d >= cutoff) {
+        if (d >= cutoff && (!endCutoff || d <= endCutoff)) {
           completedGoals++;
           const pts = g.points || masterPoints.get(g.goalId) || 0;
           totalPoints += pts;
@@ -134,7 +142,11 @@ const computeStats = async (range: string) => {
   });
 
   const visitors = (viewsRes.data || [])
-    .filter((v: any) => v.date && new Date(v.date) >= cutoff)
+    .filter((v: any) => {
+      if (!v.date) return false;
+      const d = new Date(v.date);
+      return d >= cutoff && (!endCutoff || d <= endCutoff);
+    })
     .reduce((acc: number, v: any) => acc + (v.hits || 0), 0);
 
   const chartData = Object.keys(chartMap)
@@ -384,7 +396,9 @@ export async function firebaseApiFetch(
     // ===== STATS =====
     if (path.startsWith("/api/stats") && method === "GET") {
       const range = query.get("range") || "all";
-      return ok(await computeStats(range));
+      const from = query.get("from");
+      const to = query.get("to");
+      return ok(await computeStats(range, from, to));
     }
 
     return fail(404, `No handler for ${method} ${path}`);
