@@ -548,7 +548,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
   isLoading: boolean;
   appSettings?: any;
 }) {
-   const [timeFilter, setTimeFilter] = useState<'all-time' | 'monthly' | 'weekly'>('all-time');
+  const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -572,8 +572,8 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
       return goals.filter(g => {
         if (!g.completed) return false;
         
-         // "all-time" includes all completed goals regardless of date
-         if (timeFilter === 'all-time') return true;
+        // "all-time" includes all completed goals regardless of date
+        if (timeFilter === TIME_RANGE.ALL_TIME) return true;
         
         // "Monthly" and "Weekly" require completedAt to check boundaries
         if (!g.completedAt) return false;
@@ -584,10 +584,10 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
         // Robust check for invalid date
         if (isNaN(compTime)) return false;
         
-        if (timeFilter === 'monthly') {
+        if (timeFilter === TIME_RANGE.MONTHLY) {
           return compTime >= startOfMonth.getTime();
         }
-        if (timeFilter === 'weekly') {
+        if (timeFilter === TIME_RANGE.WEEKLY) {
           return compTime >= startOfWeek.getTime();
         }
         return false;
