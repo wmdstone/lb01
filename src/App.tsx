@@ -1305,17 +1305,22 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
 // --- ADMIN TABS (API INTEGRATED) ---
 
 function AdminStudentsTab({ students, refreshData, masterGoals, categories, calculateTotalPoints }: any) {
-  const [search, setSearch] = useState('');
+  const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
 
   const studentsList = Array.isArray(students) ? students : [];
-  const filtered = studentsList.filter((s: any) => {
-    const q = search.toLowerCase();
-    return s.name?.toLowerCase().includes(q) || (s.tags && s.tags.some((tag: string) => tag.toLowerCase().includes(q)));
-  });
+  const availableTags = useMemo(() => {
+    const set = new Set<string>();
+    studentsList.forEach((s: any) => (s.tags || []).forEach((t: string) => t && set.add(t)));
+    return Array.from(set);
+  }, [studentsList]);
+  const filtered = useMemo(
+    () => applyStudentSearchFilter(studentsList, searchFilter),
+    [studentsList, searchFilter]
+  );
 
   const handleSave = async (formData: any) => {
     // 1. Calculate old ranks for all students
@@ -1390,11 +1395,12 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-text-light" />
-        <input 
-          type="text" placeholder="Search by name..." value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-12 pr-6 py-4 rounded-2xl border border-base-200 focus:ring-4 focus:ring-primary-50/50 focus:border-primary-500 transition-all text-sm outline-none bg-base-200/50 focus:bg-base-100"
+      <div className="mb-6">
+        <StudentSearchFilter
+          value={searchFilter}
+          onChange={setSearchFilter}
+          availableTags={availableTags}
+          placeholder="Search students by name..."
         />
       </div>
 
