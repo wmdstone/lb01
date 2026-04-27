@@ -759,6 +759,14 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
       {/* REST OF STUDENTS LIST */}
       <div className="bg-base-100 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-base-200 overflow-hidden mx-0">
+        <div className="px-4 md:px-8 pt-6 pb-2">
+          <StudentSearchFilter
+            value={searchFilter}
+            onChange={setSearchFilter}
+            availableTags={availableTags}
+            placeholder="Search rank 4 and below by name..."
+          />
+        </div>
         {isLoading ? (
           <div className="p-20 flex flex-col items-center gap-4">
             <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
@@ -766,7 +774,9 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
           </div>
         ) : restOfStudents.length === 0 ? (
           <div className="p-12 text-center text-text-light">
-            <p className="font-bold">No other students found.</p>
+            <p className="font-bold">
+              {hasActiveFilter ? 'No students match your search or tag filter.' : 'No other students found.'}
+            </p>
           </div>
         ) : (
           <ul className="divide-y divide-slate-50">
