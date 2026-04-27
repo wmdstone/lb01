@@ -57,6 +57,7 @@ interface Student {
   assignedGoals: AssignedGoal[];
   totalPoints?: number;
   previousRank?: number;
+  createdAt?: string;
 }
 
 function ActionMenu({ onEdit, onDelete, placement = 'bottom-end' }: { onEdit: () => void, onDelete: () => void, placement?: 'bottom-end' | 'top-center' }) {
