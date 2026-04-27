@@ -987,23 +987,13 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
         </div>
       </div>
 
-      {historicalData.length > 1 && (
+      {historicalData.length > 0 && (
         <div className="bg-base-100 rounded-3xl border border-base-200 p-6 shadow-sm mb-6">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <h4 className="font-bold text-text-main flex items-center gap-2">
               <Target className="w-5 h-5 text-primary-500" /> Progression History
             </h4>
-            <select
-              value={historyFilter}
-              onChange={(e: any) => setHistoryFilter(e.target.value)}
-              className="bg-base-50 border border-base-200 rounded-xl px-3 py-1.5 text-xs font-bold text-text-muted focus:ring-2 focus:ring-primary-100 outline-none"
-            >
-              <option value="hours">Hours</option>
-              <option value="days">Days</option>
-              <option value="weeks">Weeks</option>
-              <option value="months">Months</option>
-              <option value="years">Years</option>
-            </select>
+            <TimeRangeFilter value={historyFilterValue} onChange={setHistoryFilterValue} />
           </div>
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -1026,7 +1016,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
           <h4 className="font-bold text-text-main flex items-center gap-2">
             <CheckSquare className="w-5 h-5 text-accent-500" /> Activity Timeline
           </h4>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-light">
               <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
                 {timelineData.totalGoals} goals
@@ -1035,21 +1025,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
                 {timelineData.totalPoints} pts
               </span>
             </div>
-            <div className="inline-flex rounded-xl border border-base-200 bg-base-50 p-1">
-              {(['7d', '30d'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setTimelineRange(r)}
-                  className={`px-3 py-1 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors ${
-                    timelineRange === r
-                      ? 'bg-primary-600 text-base-50 shadow'
-                      : 'text-text-muted hover:text-text-main'
-                  }`}
-                >
-                  {r === '7d' ? 'Last 7d' : 'Last 30d'}
-                </button>
-              ))}
-            </div>
+            <TimeRangeFilter value={timelineFilterValue} onChange={setTimelineFilterValue} />
           </div>
         </div>
         <p className="text-xs text-text-muted mb-3">
@@ -1064,7 +1040,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
-                interval={timelineRange === '30d' ? 2 : 0}
+                interval={timelineData.days > 14 ? Math.ceil(timelineData.days / 10) : 0}
               />
               <YAxis
                 stroke="#888888"
