@@ -19,12 +19,14 @@ import {
 } from './components/StudentSearchFilter';
 import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
 import { StudentSearchAdvanced } from './components/StudentSearchAdvanced';
+import { AdminImportExportTab } from './components/AdminImportExportTab';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
   Target, FolderTree, Info, CheckSquare, Square, LogIn, LogOut, Loader2,
   Home, User as UserIcon, LayoutDashboard, MoreHorizontal, ArrowUp, ArrowDown,
-  Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut
+  Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -1267,7 +1269,8 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
               { id: 'students', label: 'Students', icon: Users },
               { id: 'goals', label: 'Tracks & Goals', icon: Target },
               { id: 'appearance', label: 'Appearance', icon: Palette },
-              { id: 'statistics', label: 'Statistics', icon: Search }
+              { id: 'statistics', label: 'Statistics', icon: Search },
+              { id: 'import-export', label: 'Import / Export', icon: Database }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1308,6 +1311,15 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
           )}
           {activeTab === 'statistics' && (
             <AdminStatisticsTab />
+          )}
+          {activeTab === 'import-export' && (
+            <AdminImportExportTab
+              apiFetch={apiFetch}
+              students={students}
+              masterGoals={masterGoals}
+              categories={categories}
+              refreshData={refreshData}
+            />
           )}
         </div>
       </div>
