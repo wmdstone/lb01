@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Search, X, Filter, Check } from 'lucide-react';
+import { Search, X, Filter, Check, Sparkles } from 'lucide-react';
 
 export interface StudentSearchFilterValue {
   query: string;
@@ -13,6 +13,14 @@ interface Props {
   placeholder?: string;
   className?: string;
   variant?: 'light' | 'dark';
+  /**
+   * Optional list of all student tag arrays used to compute popularity for the
+   * quick-select chips. If omitted, every available tag is treated equally and
+   * the chips fall back to alphabetical order.
+   */
+  studentTagSource?: string[][];
+  /** Max number of quick-select chips to display. Defaults to 6. */
+  maxQuickChips?: number;
 }
 
 /**
@@ -26,9 +34,14 @@ export function StudentSearchFilter({
   placeholder = 'Search by name...',
   className = '',
   variant = 'light',
+  studentTagSource,
+  maxQuickChips = 6,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [tagQuery, setTagQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
   const popRef = useRef<HTMLDivElement>(null);
+  const tagInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -45,6 +58,51 @@ export function StudentSearchFilter({
     () => [...new Set(availableTags)].filter(Boolean).sort((a, b) => a.localeCompare(b)),
     [availableTags]
   );
+
+  // Frequency map across all students (for quick-chip popularity ranking).
+  const tagFrequency = useMemo(() => {
+    const map = new Map<string, number>();
+    if (studentTagSource) {
+      studentTagSource.forEach((tags) =>
+        (tags || []).forEach((t) => {
+          if (!t) return;
+          map.set(t, (map.get(t) || 0) + 1);
+        })
+      );
+    }
+    return map;
+  }, [studentTagSource]);
+
+  // Quick-select chips: most-used tags first, then alphabetical fallback.
+  const quickChips = useMemo(() => {
+    const ranked = [...sortedTags].sort((a, b) => {
+      const fa = tagFrequency.get(a) || 0;
+      const fb = tagFrequency.get(b) || 0;
+      if (fb !== fa) return fb - fa;
+      return a.localeCompare(b);
+    });
+    return ranked.slice(0, maxQuickChips);
+  }, [sortedTags, tagFrequency, maxQuickChips]);
+
+  // Typeahead matches inside the popover.
+  const matchedTags = useMemo(() => {
+    const q = tagQuery.trim().toLowerCase();
+    if (!q) return sortedTags;
+    return sortedTags.filter((t) => t.toLowerCase().includes(q));
+  }, [sortedTags, tagQuery]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [tagQuery, open]);
+
+  useEffect(() => {
+    if (open) {
+      // Slight delay so the popover is mounted before focusing.
+      const t = setTimeout(() => tagInputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    }
+    setTagQuery('');
+  }, [open]);
 
   const toggleTag = (tag: string) => {
     const exists = value.tags.includes(tag);
@@ -66,6 +124,29 @@ export function StudentSearchFilter({
     : 'flex items-center gap-2 px-4 py-3.5 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all';
 
   const hasFilters = value.query || value.tags.length > 0;
+
+  const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, Math.max(matchedTags.length - 1, 0)));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const tag = matchedTags[highlight];
+      if (tag) {
+        toggleTag(tag);
+        setTagQuery('');
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+    } else if (e.key === 'Backspace' && !tagQuery && value.tags.length > 0) {
+      // Quick-remove last selected tag with backspace on empty input.
+      onChange({ ...value, tags: value.tags.slice(0, -1) });
+    }
+  };
 
   return (
     <div className={`flex flex-col sm:flex-row gap-2 items-stretch ${className}`}>
@@ -102,7 +183,7 @@ export function StudentSearchFilter({
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-2 w-72 max-h-80 overflow-y-auto bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-3">
+          <div className="absolute right-0 mt-2 w-80 bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-3">
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-[10px] font-black uppercase tracking-widest text-text-light">
                 Filter by tags
@@ -123,26 +204,84 @@ export function StudentSearchFilter({
                 No tags available yet.
               </p>
             ) : (
-              <div className="flex flex-col gap-1">
-                {sortedTags.map((tag) => {
-                  const checked = value.tags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleTag(tag)}
-                      className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-left text-sm transition-colors ${
-                        checked
-                          ? 'bg-primary-50 text-primary-700 font-bold'
-                          : 'hover:bg-base-200/50 text-text-main'
-                      }`}
-                    >
-                      <span className="truncate">{tag}</span>
-                      {checked && <Check className="h-4 w-4 shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                {/* Typeahead input */}
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-light" />
+                  <input
+                    ref={tagInputRef}
+                    type="text"
+                    value={tagQuery}
+                    onChange={(e) => setTagQuery(e.target.value)}
+                    onKeyDown={handleTagInputKeyDown}
+                    placeholder="Type to find tags..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-base-200 focus:ring-2 focus:ring-primary-200 focus:border-primary-400 outline-none text-sm bg-base-200/40"
+                  />
+                </div>
+
+                {/* Quick-select chips (popular tags) */}
+                {!tagQuery && quickChips.length > 0 && (
+                  <div className="mb-2">
+                    <div className="flex items-center gap-1 px-1 mb-1.5">
+                      <Sparkles className="h-3 w-3 text-accent-500" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-text-light">
+                        Quick select
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {quickChips.map((tag) => {
+                        const checked = value.tags.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleTag(tag)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all ${
+                              checked
+                                ? 'bg-primary-600 text-base-50 border-primary-600'
+                                : 'bg-base-100 text-text-main border-base-200 hover:border-primary-400 hover:bg-primary-50'
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Filtered list */}
+                <div className="max-h-56 overflow-y-auto flex flex-col gap-1 border-t border-base-200 pt-2">
+                  {matchedTags.length === 0 ? (
+                    <p className="text-xs text-text-light px-1 py-3 text-center">
+                      No tags match "{tagQuery}".
+                    </p>
+                  ) : (
+                    matchedTags.map((tag, idx) => {
+                      const checked = value.tags.includes(tag);
+                      const isHi = idx === highlight;
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onMouseEnter={() => setHighlight(idx)}
+                          onClick={() => toggleTag(tag)}
+                          className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-left text-sm transition-colors ${
+                            checked
+                              ? 'bg-primary-50 text-primary-700 font-bold'
+                              : isHi
+                                ? 'bg-base-200/70 text-text-main'
+                                : 'hover:bg-base-200/50 text-text-main'
+                          }`}
+                        >
+                          <span className="truncate">{highlightMatch(tag, tagQuery)}</span>
+                          {checked && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -198,3 +337,21 @@ export function applyStudentSearchFilter<T extends { name?: string; tags?: strin
 }
 
 export const emptyStudentSearchFilter: StudentSearchFilterValue = { query: '', tags: [] };
+
+// --- Helpers ---
+function highlightMatch(text: string, query: string): React.ReactNode {
+  const q = query.trim();
+  if (!q) return text;
+  const lower = text.toLowerCase();
+  const idx = lower.indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-accent-100 text-text-main rounded px-0.5">
+        {text.slice(idx, idx + q.length)}
+      </mark>
+      {text.slice(idx + q.length)}
+    </>
+  );
+}
