@@ -29,6 +29,13 @@ import {
   DB_EVENTS,
   type DbConnection,
   type DbKeyType,
+  connSelect,
+  connInsert,
+  connDeleteAll,
+  connDeleteById,
+  callProxy,
+  APP_SCHEMA_SQL,
+  EXEC_SQL_BOOTSTRAP,
 } from "@/lib/dbConnections";
 
 const APP_TABLES = [
