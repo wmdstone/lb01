@@ -790,6 +790,48 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
   const student = students.find(s => s.id === studentId);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [historyFilter, setHistoryFilter] = useState<'hours' | 'days' | 'weeks' | 'months' | 'years'>('days');
+  const [timelineRange, setTimelineRange] = useState<'7d' | '30d'>('7d');
+
+  const timelineData = React.useMemo(() => {
+    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
+    const days = timelineRange === '7d' ? 7 : 30;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+
+    // Build a date->{goals,points} map keyed by YYYY-MM-DD
+    const map = new Map<string, { goals: number; points: number }>();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      map.set(key, { goals: 0, points: 0 });
+    }
+
+    let totalGoals = 0;
+    let totalPoints = 0;
+    student.assignedGoals.forEach(g => {
+      if (!g.completed || !g.completedAt) return;
+      const cd = new Date(g.completedAt);
+      const key = cd.toISOString().slice(0, 10);
+      if (!map.has(key)) return;
+      const mg = masterGoals.find(m => m.id === g.goalId);
+      const pts = mg?.points || 0;
+      const cur = map.get(key)!;
+      cur.goals += 1;
+      cur.points += pts;
+      totalGoals += 1;
+      totalPoints += pts;
+    });
+
+    const rows = Array.from(map.entries()).map(([date, v]) => {
+      const d = new Date(date);
+      const label = timelineRange === '7d'
+        ? d.toLocaleDateString(undefined, { weekday: 'short' })
+        : `${d.getMonth() + 1}/${d.getDate()}`;
+      return { date: label, goals: v.goals, points: v.points };
+    });
+    return { rows, totalGoals, totalPoints };
+  }, [student?.assignedGoals, masterGoals, timelineRange]);
 
   const historicalData = React.useMemo(() => {
     if (!student?.assignedGoals || student.assignedGoals.length === 0) return [];
@@ -943,6 +985,73 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
           </div>
         </div>
       )}
+
+      <div className="bg-base-100 rounded-3xl border border-base-200 p-6 shadow-sm mb-6">
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <h4 className="font-bold text-text-main flex items-center gap-2">
+            <CheckSquare className="w-5 h-5 text-accent-500" /> Activity Timeline
+          </h4>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-text-light">
+              <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
+                {timelineData.totalGoals} goals
+              </span>
+              <span className="px-2 py-1 rounded-lg bg-base-50 border border-base-200">
+                {timelineData.totalPoints} pts
+              </span>
+            </div>
+            <div className="inline-flex rounded-xl border border-base-200 bg-base-50 p-1">
+              {(['7d', '30d'] as const).map(r => (
+                <button
+                  key={r}
+                  onClick={() => setTimelineRange(r)}
+                  className={`px-3 py-1 text-[11px] font-black uppercase tracking-widest rounded-lg transition-colors ${
+                    timelineRange === r
+                      ? 'bg-primary-600 text-base-50 shadow'
+                      : 'text-text-muted hover:text-text-main'
+                  }`}
+                >
+                  {r === '7d' ? 'Last 7d' : 'Last 30d'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-text-muted mb-3">
+          Daily completed goals — useful to validate weekly &amp; monthly leaderboard rankings.
+        </p>
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={timelineData.rows}>
+              <XAxis
+                dataKey="date"
+                stroke="#888888"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                interval={timelineRange === '30d' ? 2 : 0}
+              />
+              <YAxis
+                stroke="#888888"
+                fontSize={10}
+                tickLine={false}
+                axisLine={false}
+                width={30}
+                allowDecimals={false}
+              />
+              <RechartsTooltip
+                contentStyle={{
+                  borderRadius: '1rem',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                }}
+                formatter={(value: any, name: any) => [value, name === 'goals' ? 'Goals' : 'Points']}
+              />
+              <Bar dataKey="goals" fill="var(--theme-accent-500)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       <div className="space-y-4">
         <h2 className="text-xl font-black text-text-main flex items-center gap-2 px-2">
