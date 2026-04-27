@@ -803,7 +803,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
   const [timelineFilterValue, setTimelineFilterValue] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
 
   const timelineData = React.useMemo(() => {
-    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
+    if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0, days: 0 };
     // Resolve the active range. Unbounded sides fall back to the goal data extents.
     const now = new Date();
     const completedTs = student.assignedGoals
