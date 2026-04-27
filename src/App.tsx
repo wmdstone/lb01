@@ -804,9 +804,20 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 
   const timelineData = React.useMemo(() => {
     if (!student?.assignedGoals) return { rows: [], totalGoals: 0, totalPoints: 0 };
-    const days = timelineRange === '7d' ? 7 : 30;
+    // Resolve the active range. Unbounded sides fall back to the goal data extents.
     const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+    const completedTs = student.assignedGoals
+      .filter(g => g.completed && g.completedAt)
+      .map(g => new Date(g.completedAt!).getTime())
+      .filter(t => !isNaN(t));
+    const minTs = completedTs.length ? Math.min(...completedTs) : now.getTime();
+    const startDate = timelineFilterValue.range.start ?? new Date(minTs);
+    const endDate = timelineFilterValue.range.end ?? now;
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    const dayMs = 86400000;
+    const days = Math.max(1, Math.min(366, Math.round((end.getTime() - start.getTime()) / dayMs) + 1));
+    const compact = days > 14;
 
     // Build a date->{goals,points} map keyed by YYYY-MM-DD
     const map = new Map<string, { goals: number; points: number }>();
@@ -835,13 +846,13 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
 
     const rows = Array.from(map.entries()).map(([date, v]) => {
       const d = new Date(date);
-      const label = timelineRange === '7d'
-        ? d.toLocaleDateString(undefined, { weekday: 'short' })
-        : `${d.getMonth() + 1}/${d.getDate()}`;
+      const label = compact
+        ? `${d.getMonth() + 1}/${d.getDate()}`
+        : d.toLocaleDateString(undefined, { weekday: 'short' });
       return { date: label, goals: v.goals, points: v.points };
     });
-    return { rows, totalGoals, totalPoints };
-  }, [student?.assignedGoals, masterGoals, timelineRange]);
+    return { rows, totalGoals, totalPoints, days };
+  }, [student?.assignedGoals, masterGoals, timelineFilterValue]);
 
   const historicalData = React.useMemo(() => {
     if (!student?.assignedGoals || student.assignedGoals.length === 0) return [];
