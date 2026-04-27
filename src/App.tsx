@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { firebaseApiFetch } from './lib/firebaseApi';
+import { trackEvent, setAnalyticsAdminFlag } from './lib/analytics';
 import {
   TIME_RANGE,
   TIME_RANGE_OPTIONS,
@@ -239,6 +240,8 @@ export default function App() {
     
     // Track unique view basically (once per loaded session)
     apiFetch('/api/track-visit', { method: 'POST' }).catch(() => {});
+    // Rich app-event tracking (visitor + device).
+    trackEvent('page_view');
 
     return () => window.removeEventListener('auth-expired', handleAuthExpired);
   }, []);
@@ -366,6 +369,8 @@ export default function App() {
                       await apiFetch('/api/logout', { method: 'POST' });
                       removeLocalToken();
                       setIsAdmin(false);
+                      setAnalyticsAdminFlag(false);
+                      trackEvent('admin_logout', { isAdmin: true });
                       navigateTo('/');
                     }}
                     className="p-2 text-text-light hover:text-red-500 transition-colors"
@@ -411,6 +416,8 @@ export default function App() {
             )}
             {currentRoute.path === '/login' && <LoginPage onLogin={() => {
               setIsAdmin(true);
+              setAnalyticsAdminFlag(true);
+              trackEvent('admin_login', { isAdmin: true });
               navigateTo('/admin');
             }} appSettings={appSettings} />}
             {currentRoute.path === '/admin' && (
@@ -423,7 +430,11 @@ export default function App() {
                   appSettings={appSettings}
                   setAppSettings={setAppSettings}
                 />
-              ) : <LoginPage onLogin={() => setIsAdmin(true)} appSettings={appSettings} />
+              ) : <LoginPage onLogin={() => {
+                setIsAdmin(true);
+                setAnalyticsAdminFlag(true);
+                trackEvent('admin_login', { isAdmin: true });
+              }} appSettings={appSettings} />
             )}
           </motion.div>
         </AnimatePresence>
