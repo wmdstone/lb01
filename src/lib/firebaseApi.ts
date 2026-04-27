@@ -31,6 +31,7 @@ const mapStudentRow = (r: any) => ({
   assignedGoals: r.assigned_goals || [],
   totalPoints: r.total_points || 0,
   previousRank: r.previous_rank ?? undefined,
+  createdAt: r.created_at ?? undefined,
 });
 
 const mapStudentInput = (s: any) => {

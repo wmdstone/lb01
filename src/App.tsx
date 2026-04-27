@@ -17,6 +17,7 @@ import {
   emptyStudentSearchFilter,
   type StudentSearchFilterValue,
 } from './components/StudentSearchFilter';
+import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
@@ -57,6 +58,7 @@ interface Student {
   assignedGoals: AssignedGoal[];
   totalPoints?: number;
   previousRank?: number;
+  createdAt?: string;
 }
 
 function ActionMenu({ onEdit, onDelete, placement = 'bottom-end' }: { onEdit: () => void, onDelete: () => void, placement?: 'bottom-end' | 'top-center' }) {
@@ -571,6 +573,7 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 }) {
   const [timeFilter, setTimeFilter] = useState<TimeRange>(TIME_RANGE.ALL_TIME);
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
+  const [sortKey, setSortKey] = useState<SortKey>('points');
 
   const sortedStudents = useMemo(() => {
     if (!Array.isArray(students)) return [];
@@ -658,15 +661,21 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
   const top3 = [sortedStudents[1], sortedStudents[0], sortedStudents[2]];
   const restOfStudentsRaw = sortedStudents.slice(3);
-  const restOfStudents = useMemo(
-    () => applyStudentSearchFilter(restOfStudentsRaw, searchFilter),
-    [restOfStudentsRaw, searchFilter]
-  );
+  const restOfStudents = useMemo(() => {
+    const filtered = applyStudentSearchFilter(restOfStudentsRaw, searchFilter);
+    // Default leaderboard ordering is points-desc and is already produced upstream;
+    // only re-sort when the user picks a different key.
+    return sortKey === 'points' ? filtered : sortStudents(filtered, sortKey);
+  }, [restOfStudentsRaw, searchFilter, sortKey]);
   const availableTags = useMemo(() => {
     const set = new Set<string>();
     (students || []).forEach((s) => (s.tags || []).forEach((t) => t && set.add(t)));
     return Array.from(set);
   }, [students]);
+  const studentTagSource = useMemo(
+    () => (students || []).map((s) => s.tags || []),
+    [students]
+  );
   const hasActiveFilter = !!(searchFilter.query || searchFilter.tags.length > 0);
 
   // Mocking "My Rank": User yang sedang login (Demo purpose, taking first student)
@@ -759,13 +768,17 @@ function LeaderboardPage({ students, masterGoals, calculateTotalPoints, navigate
 
       {/* REST OF STUDENTS LIST */}
       <div className="bg-base-100 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-base-200 overflow-hidden mx-0">
-        <div className="px-4 md:px-8 pt-6 pb-2">
-          <StudentSearchFilter
-            value={searchFilter}
-            onChange={setSearchFilter}
-            availableTags={availableTags}
-            placeholder="Search rank 4 and below by name..."
-          />
+        <div className="px-4 md:px-8 pt-6 pb-2 flex flex-col sm:flex-row sm:items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <StudentSearchFilter
+              value={searchFilter}
+              onChange={setSearchFilter}
+              availableTags={availableTags}
+              studentTagSource={studentTagSource}
+              placeholder="Search rank 4 and below by name..."
+            />
+          </div>
+          <StudentSortDropdown value={sortKey} onChange={setSortKey} />
         </div>
         {isLoading ? (
           <div className="p-20 flex flex-col items-center gap-4">
@@ -1306,6 +1319,7 @@ function AdminDashboard({ students, refreshData, masterGoals, categories, calcul
 
 function AdminStudentsTab({ students, refreshData, masterGoals, categories, calculateTotalPoints }: any) {
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(emptyStudentSearchFilter);
+  const [sortKey, setSortKey] = useState<SortKey>('name');
   const [modalOpen, setModalOpen] = useState(false);
   const [editData, setEditData] = useState<any>(null);
   
@@ -1317,10 +1331,19 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
     studentsList.forEach((s: any) => (s.tags || []).forEach((t: string) => t && set.add(t)));
     return Array.from(set);
   }, [studentsList]);
-  const filtered = useMemo(
-    () => applyStudentSearchFilter(studentsList, searchFilter),
-    [studentsList, searchFilter]
+  const studentTagSource = useMemo(
+    () => studentsList.map((s: any) => s.tags || []),
+    [studentsList]
   );
+  const filtered = useMemo(() => {
+    const matched = applyStudentSearchFilter(studentsList, searchFilter);
+    // Precompute totalPoints so 'points' sort works against the live goal data.
+    const enriched = matched.map((s: any) => ({
+      ...s,
+      totalPoints: calculateTotalPoints(s.assignedGoals || []),
+    }));
+    return sortStudents(enriched, sortKey);
+  }, [studentsList, searchFilter, sortKey, calculateTotalPoints]);
 
   const handleSave = async (formData: any) => {
     // 1. Calculate old ranks for all students
@@ -1395,13 +1418,17 @@ function AdminStudentsTab({ students, refreshData, masterGoals, categories, calc
         </div>
       </div>
 
-      <div className="mb-6">
-        <StudentSearchFilter
-          value={searchFilter}
-          onChange={setSearchFilter}
-          availableTags={availableTags}
-          placeholder="Search students by name..."
-        />
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <StudentSearchFilter
+            value={searchFilter}
+            onChange={setSearchFilter}
+            availableTags={availableTags}
+            studentTagSource={studentTagSource}
+            placeholder="Search students by name..."
+          />
+        </div>
+        <StudentSortDropdown value={sortKey} onChange={setSortKey} />
       </div>
 
       <div className="space-y-3">
