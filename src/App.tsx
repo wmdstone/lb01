@@ -1500,6 +1500,57 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
     }));
   };
 
+  // ── Bulk track-scoped actions ──────────────────────────────────────────────
+  // Operate on whatever is currently visible in the goal list (respects the
+  // "All Tracks" / specific-track filter at the top of the panel).
+  const visibleGoalIds: string[] = displayedMasterGoals.map((mg: any) => mg.id);
+  const visibleAssignedCount = visibleGoalIds.filter(id => isAssigned(id)).length;
+  const visibleCompletedCount = visibleGoalIds.filter(id => isCompleted(id)).length;
+  const allVisibleAssigned = visibleGoalIds.length > 0 && visibleAssignedCount === visibleGoalIds.length;
+  const allVisibleCompleted = visibleAssignedCount > 0 && visibleCompletedCount === visibleAssignedCount;
+  const scopeLabel = filterCat === 'ALL'
+    ? 'all tracks'
+    : (categories.find((c: any) => c.id === filterCat)?.name || 'this track');
+
+  const bulkSetAssigned = (assign: boolean) => {
+    setFormData(prev => {
+      if (assign) {
+        const existingIds = new Set(prev.assignedGoals.map(ag => ag.goalId));
+        const additions = visibleGoalIds
+          .filter(id => !existingIds.has(id))
+          .map(id => ({ goalId: id, completed: false }));
+        if (additions.length === 0) return prev;
+        return { ...prev, assignedGoals: [...prev.assignedGoals, ...additions] };
+      }
+      // Unassign: drop everything in scope (also clears their completion).
+      const drop = new Set(visibleGoalIds);
+      return { ...prev, assignedGoals: prev.assignedGoals.filter(ag => !drop.has(ag.goalId)) };
+    });
+  };
+
+  const bulkSetCompleted = (complete: boolean) => {
+    setFormData(prev => {
+      const scope = new Set(visibleGoalIds);
+      const nowIso = new Date().toISOString();
+      let next = prev.assignedGoals.map(ag => {
+        if (!scope.has(ag.goalId)) return ag;
+        if (complete) {
+          return ag.completed ? ag : { ...ag, completed: true, completedAt: ag.completedAt || nowIso };
+        }
+        return { ...ag, completed: false, completedAt: undefined };
+      });
+      // When marking complete, auto-assign any visible goals that weren't yet assigned.
+      if (complete) {
+        const existingIds = new Set(next.map(ag => ag.goalId));
+        const additions = visibleGoalIds
+          .filter(id => !existingIds.has(id))
+          .map(id => ({ goalId: id, completed: true, completedAt: nowIso }));
+        if (additions.length) next = [...next, ...additions];
+      }
+      return { ...prev, assignedGoals: next };
+    });
+  };
+
   return (
     <div className="fixed inset-0 bg-base-900/60 backdrop-blur-md z-[60] flex justify-center items-center p-4">
        <motion.div 
@@ -1575,6 +1626,46 @@ function StudentAdminModal({ student, masterGoals, categories, onClose, onSave }
                 {categories.map((c: any, index: number) => <option key={c.id || `cp1-${index}`} value={c.id}>{c.name}</option>)}
               </select>
             </div>
+
+            {/* Bulk actions for the current track scope */}
+            {visibleGoalIds.length > 0 && (
+              <div className="mb-4 p-3 rounded-2xl bg-base-50 border border-base-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="text-[10px] font-black uppercase tracking-widest text-text-light">
+                  Bulk on <span className="text-primary-600">{scopeLabel}</span>
+                  <span className="ml-2 normal-case tracking-normal font-bold text-text-muted">
+                    · {visibleAssignedCount}/{visibleGoalIds.length} assigned · {visibleCompletedCount} completed
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => bulkSetAssigned(!allVisibleAssigned)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
+                      allVisibleAssigned
+                        ? 'bg-base-200 text-text-muted hover:bg-base-300'
+                        : 'bg-primary-600 text-base-50 hover:bg-primary-700'
+                    }`}
+                    title={allVisibleAssigned ? 'Unassign all visible' : 'Assign all visible'}
+                  >
+                    {allVisibleAssigned ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                    {allVisibleAssigned ? 'Unassign all' : 'Assign all'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => bulkSetCompleted(!allVisibleCompleted)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl transition-all ${
+                      allVisibleCompleted
+                        ? 'bg-base-200 text-text-muted hover:bg-base-300'
+                        : 'bg-accent-500 text-base-50 hover:bg-accent-600'
+                    }`}
+                    title={allVisibleCompleted ? 'Unmark all completed' : 'Mark all completed'}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    {allVisibleCompleted ? 'Unmark all' : 'Mark all done'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 pb-4">
               {displayedMasterGoals.map((mg: any, index: number) => {
