@@ -952,7 +952,7 @@ function StudentProfilePage({ studentId, students, masterGoals, categories, calc
               </div>
             </div>
             <div className="flex-1 bg-primary-600 rounded-2xl p-4 shadow-lg shadow-primary-200">
-              <div className="text-[10px] font-black text-primary-200 uppercase tracking-widest mb-1">All-Time Pts</div>
+              <div className="text-[10px] font-black text-primary-200 uppercase tracking-widest mb-1">{POINTS_CAPTION.ALL_TIME}</div>
               <div className="text-2xl font-black text-base-50">{totalPoints}</div>
             </div>
           </div>
