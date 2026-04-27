@@ -19,12 +19,14 @@ import {
 } from './components/StudentSearchFilter';
 import { StudentSortDropdown, sortStudents, type SortKey } from './components/StudentSortDropdown';
 import { StudentSearchAdvanced } from './components/StudentSearchAdvanced';
+import { AdminImportExportTab } from './components/AdminImportExportTab';
 import { 
   Trophy, ArrowLeft, Plus, CheckCircle2, Circle, Medal, Award, Flame, 
   Settings, Search, Edit, Trash2, X, ChevronDown, ChevronUp, Users, 
   Target, FolderTree, Info, CheckSquare, Square, LogIn, LogOut, Loader2,
   Home, User as UserIcon, LayoutDashboard, MoreHorizontal, ArrowUp, ArrowDown,
-  Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut
+  Palette, Save, Image as ImageIcon, TrendingUp, Crown, ZoomIn, ZoomOut,
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
