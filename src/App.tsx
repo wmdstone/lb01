@@ -2368,7 +2368,8 @@ function AdminAppearanceTab({ refreshData, appSettings, setAppSettings }: any) {
   );
 }
 function AdminStatisticsTab() {
-  const [range, setRange] = useState('1w');
+  // Reusable shared filter (preset + date range picker).
+  const [filter, setFilter] = useState<TimeRangeValue>(() => createDefaultTimeRangeValue('last-week'));
   const [stats, setStats] = useState<any>(null);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2377,8 +2378,23 @@ function AdminStatisticsTab() {
     const fetchData = async () => {
       setLoading(true);
       try {
+        // Map shared preset → legacy `range=` param the API understands.
+        // Custom range takes precedence via from/to ISO params.
+        const presetMap: Record<string, string> = {
+          'last-week':  '1w',
+          'last-month': '1m',
+          'last-year':  '1y',
+          'all-time':   'all',
+          'custom':     'all',
+        };
+        const params = new URLSearchParams();
+        params.set('range', presetMap[filter.preset] || 'all');
+        if (filter.preset === 'custom') {
+          if (filter.range.start) params.set('from', filter.range.start.toISOString());
+          if (filter.range.end)   params.set('to',   filter.range.end.toISOString());
+        }
         const [statsRes, logsRes] = await Promise.all([
-          apiFetch(`/api/stats?range=${range}`),
+          apiFetch(`/api/stats?${params.toString()}`),
           apiFetch('/api/logs')
         ]);
         if (statsRes.ok) setStats(await statsRes.json());
@@ -2393,7 +2409,7 @@ function AdminStatisticsTab() {
       }
     };
     fetchData();
-  }, [range]);
+  }, [filter]);
 
   return (
     <div className="p-8">
@@ -2401,17 +2417,7 @@ function AdminStatisticsTab() {
         <h3 className="text-2xl font-black text-text-main underline decoration-primary-500 decoration-4 underline-offset-8">
           Dashboard Statistics & Logging
         </h3>
-        <select 
-          value={range} 
-          onChange={e => setRange(e.target.value)}
-          className="bg-base-100 border border-base-200 rounded-xl px-4 py-2 font-bold text-sm focus:ring-2 focus:ring-primary-100"
-        >
-          <option value="today">Today</option>
-          <option value="1w">Last 7 Days</option>
-          <option value="1m">Last 1 Month</option>
-          <option value="1y">Last 1 Year</option>
-          <option value="all">Historical Data</option>
-        </select>
+        <TimeRangeFilter value={filter} onChange={setFilter} size="md" />
       </div>
 
       {loading ? (
