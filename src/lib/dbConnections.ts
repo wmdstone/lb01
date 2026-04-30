@@ -413,15 +413,26 @@ export async function callProxy(payload: {
   onConflict?: string;
   sql?: string;
 }): Promise<any> {
-  const res = await fetch(PROXY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: DEFAULT_KEY,
-      Authorization: `Bearer ${DEFAULT_KEY}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  // Hard timeout so a broken/unreachable proxy can never hang the UI.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 6000);
+  let res: Response;
+  try {
+    res = await fetch(PROXY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: DEFAULT_KEY,
+        Authorization: `Bearer ${DEFAULT_KEY}`,
+      },
+      body: JSON.stringify(payload),
+      signal: ctl.signal,
+    });
+  } catch (e: any) {
+    clearTimeout(timer);
+    throw new Error(`Proxy unreachable: ${e?.message || e}`);
+  }
+  clearTimeout(timer);
   const text = await res.text();
   let data: any = {};
   try {
