@@ -243,7 +243,22 @@ export async function testFirestore(
       probe.docCount = snaps.size;
       probe.exists = snaps.docs.some((d: any) => d.id !== PROBE_ID);
     } catch (e: any) {
-      probe.readError = String(e?.message || e);
+      const msg = String(e?.message || e);
+      // Add a helpful hint when the named Firestore DB does not exist.
+      if (/NOT_FOUND|Database .* not found|database does not exist/i.test(msg)) {
+        probe.readError =
+          `${msg} — The Firestore database id "${
+            (config as any).firestoreDatabaseId || (config as any).databaseId || "(default)"
+          }" was not found on project "${config.projectId}". ` +
+          `Either create that database in the Firebase console (Firestore → Add database), ` +
+          `or remove the "firestoreDatabaseId" field so the connection uses the (default) database.`;
+      } else if (/permission-denied|Missing or insufficient permissions/i.test(msg)) {
+        probe.readError =
+          `${msg} — Update Firestore Security Rules for project "${config.projectId}" to allow reads on collection "${name}". ` +
+          `Quick test rule: \`match /{document=**} { allow read, write: if true; }\` (do NOT use in production).`;
+      } else {
+        probe.readError = msg;
+      }
     }
 
     // 2) write dry-run

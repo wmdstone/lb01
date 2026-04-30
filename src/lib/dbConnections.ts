@@ -5,6 +5,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabase as defaultClient } from '../integrations/supabase/client';
+import { clearCache as clearLocalCache } from './localCache';
 import {
   connectFirestore,
   testFirestore,
@@ -165,6 +166,14 @@ export function setActive(id: string) {
   const conn = listConnections().find((c) => c.id === id);
   if (!conn) return;
   localStorage.setItem(ACTIVE_KEY, id);
+  // Drop any cached payload for OTHER connections so the UI shows fresh
+  // data from the newly-selected backend instead of stale local cache.
+  // We keep the cache for the connection we're switching TO so the UI
+  // can render instantly while the background refresh runs.
+  try {
+    const all = listConnections();
+    all.forEach((c) => { if (c.id !== id) clearLocalCache(c.id); });
+  } catch {}
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
 }
 
