@@ -18,7 +18,6 @@ import {
   getApps,
   deleteApp,
 } from "firebase/app";
-import type { FirebaseApp, FirebaseOptions } from "firebase/app";
 import {
   getFirestore,
   initializeFirestore,
@@ -33,7 +32,13 @@ import {
   query,
   limit as fsLimit,
 } from "firebase/firestore";
-import type { Firestore } from "firebase/firestore";
+
+// Local structural stand-ins. The firebase package re-exports these names as
+// namespaces in some bundler configs which breaks `type` imports. We only
+// need an opaque shape for our internal cache/maps.
+type FirebaseOptions = Record<string, any>;
+type FirebaseApp = { name: string; options: any; automaticDataCollectionEnabled?: boolean };
+type Firestore = any;
 
 export type FirebaseConfig = FirebaseOptions & {
   apiKey: string;
