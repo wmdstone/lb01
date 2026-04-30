@@ -117,6 +117,37 @@ export function getActiveConnection(): DbConnection {
   return listConnections().find((c) => c.id === id) || defaultConnection;
 }
 
+// Track connections that have failed recently so we can transparently fall
+// back to the default Lovable Cloud / Firebase connection instead of hanging
+// the entire app on a broken external Supabase project the user added once
+// and forgot about.
+const failedConnectionIds = new Set<string>();
+
+export function markConnectionFailed(id: string) {
+  if (id === DEFAULT_ID) return;
+  failedConnectionIds.add(id);
+  try {
+    // Auto-revert active selection so subsequent reads use the working default.
+    if (getActiveId() === id) {
+      localStorage.setItem(ACTIVE_KEY, DEFAULT_ID);
+      window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id: DEFAULT_ID, reason: "fallback" } }));
+      console.warn(`[dbConnections] Active connection ${id} failed; reverted to default.`);
+    }
+  } catch {}
+}
+
+export function isConnectionFailed(id: string) {
+  return failedConnectionIds.has(id);
+}
+
+function resolveActiveConnection(): DbConnection {
+  const conn = getActiveConnection();
+  if (conn.id !== DEFAULT_ID && failedConnectionIds.has(conn.id)) {
+    return defaultConnection;
+  }
+  return conn;
+}
+
 export function getClientFor(conn: DbConnection): SupabaseClient {
   if (clientCache.has(conn.id)) return clientCache.get(conn.id)!;
   const c = createClient(conn.url, conn.key, {
@@ -382,15 +413,26 @@ export async function callProxy(payload: {
   onConflict?: string;
   sql?: string;
 }): Promise<any> {
-  const res = await fetch(PROXY_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: DEFAULT_KEY,
-      Authorization: `Bearer ${DEFAULT_KEY}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  // Hard timeout so a broken/unreachable proxy can never hang the UI.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 6000);
+  let res: Response;
+  try {
+    res = await fetch(PROXY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: DEFAULT_KEY,
+        Authorization: `Bearer ${DEFAULT_KEY}`,
+      },
+      body: JSON.stringify(payload),
+      signal: ctl.signal,
+    });
+  } catch (e: any) {
+    clearTimeout(timer);
+    throw new Error(`Proxy unreachable: ${e?.message || e}`);
+  }
+  clearTimeout(timer);
   const text = await res.text();
   let data: any = {};
   try {

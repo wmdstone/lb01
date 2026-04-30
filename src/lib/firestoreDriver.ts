@@ -17,9 +17,8 @@ import {
   getApp,
   getApps,
   deleteApp,
-  type FirebaseApp,
-  type FirebaseOptions,
 } from "firebase/app";
+import type { FirebaseApp, FirebaseOptions } from "firebase/app";
 import {
   getFirestore,
   initializeFirestore,
@@ -33,8 +32,8 @@ import {
   deleteDoc,
   query,
   limit as fsLimit,
-  type Firestore,
 } from "firebase/firestore";
+import type { Firestore } from "firebase/firestore";
 
 export type FirebaseConfig = FirebaseOptions & {
   apiKey: string;

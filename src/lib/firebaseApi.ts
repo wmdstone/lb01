@@ -14,6 +14,8 @@ import {
   connUpsertReturning,
   connUpdate,
   connDeleteById,
+  markConnectionFailed,
+  DEFAULT_CONNECTION_ID,
 } from './dbConnections';
 
 // --- Admin password (presentation-level) ---
@@ -207,10 +209,7 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
 };
 
 // --- Router ---
-export async function firebaseApiFetch(
-  url: string,
-  init: RequestInit = {},
-): Promise<Response> {
+async function runRouter(url: string, init: RequestInit, conn: any): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   const path = url.split("?")[0];
   const queryStr = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
@@ -223,8 +222,6 @@ export async function firebaseApiFetch(
       body = init.body;
     }
   }
-
-  const conn = getActiveConnection();
 
   try {
     // ===== AUTH =====
@@ -512,5 +509,36 @@ export async function firebaseApiFetch(
   } catch (err: any) {
     console.error("api error:", method, path, err);
     return fail(500, String(err?.message || err));
+  }
+}
+
+// Public entry point. Tries the active connection; if it fails (e.g. broken
+// external Supabase project the user added) we mark it failed, fall back to
+// the default Lovable Cloud connection, and retry once. This guarantees the
+// app shell always loads instead of hanging on a dead backend.
+export async function firebaseApiFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const conn = getActiveConnection();
+  try {
+    const res = await runRouter(url, init, conn);
+    if (res.status >= 500 && conn.id !== DEFAULT_CONNECTION_ID) {
+      // Treat 500s from a non-default backend as a connection failure so we
+      // don't keep hammering it on every refetch.
+      throw new Error("backend 5xx");
+    }
+    return res;
+  } catch (err: any) {
+    if (conn.id !== DEFAULT_CONNECTION_ID) {
+      console.warn(
+        `[firebaseApiFetch] active connection ${conn.id} failed, falling back to default`,
+        err?.message || err,
+      );
+      markConnectionFailed(conn.id);
+      // Retry with the default connection
+      return runRouter(url, init, getActiveConnection());
+    }
+    throw err;
   }
 }
