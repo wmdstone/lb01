@@ -14,6 +14,8 @@ import {
   connUpsertReturning,
   connUpdate,
   connDeleteById,
+  markConnectionFailed,
+  DEFAULT_CONNECTION_ID,
 } from './dbConnections';
 
 // --- Admin password (presentation-level) ---
