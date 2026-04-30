@@ -209,10 +209,7 @@ const computeStats = async (range: string, from?: string | null, to?: string | n
 };
 
 // --- Router ---
-export async function firebaseApiFetch(
-  url: string,
-  init: RequestInit = {},
-): Promise<Response> {
+async function runRouter(url: string, init: RequestInit, conn: any): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   const path = url.split("?")[0];
   const queryStr = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
@@ -225,8 +222,6 @@ export async function firebaseApiFetch(
       body = init.body;
     }
   }
-
-  const conn = getActiveConnection();
 
   try {
     // ===== AUTH =====
