@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Download, Upload, FileText, Loader2, CheckCircle2, AlertCircle, Database } from 'lucide-react';
-import { toCSV, downloadCSV, parseCSV } from '@/lib/csv';
-import { supabase } from '@/integrations/supabase/client';
+import { toCSV, downloadCSV, parseCSV } from '../lib/csv';
 
 type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -245,11 +244,15 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
 
       // Log activity
       try {
-        await supabase.from('activity_logs').insert({
-          action: 'CSV Import',
-          details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
-          type: 'system',
-          timestamp: new Date().toISOString(),
+        await apiFetch('/api/logs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'CSV Import',
+            details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
+            type: 'system',
+            timestamp: new Date().toISOString(),
+          })
         });
       } catch {}
 
@@ -274,23 +277,23 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
   const ExportCard = ({
     icon: Icon, title, subtitle, dataKey, count,
   }: { icon: any; title: string; subtitle: string; dataKey: DatasetKey; count?: number }) => (
-    <div className="bg-base-50 border border-base-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+    <div className="bg-background border border-border rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+        <div className="shrink-0 w-10 h-10 rounded-xl bg-primary-100 text-primary flex items-center justify-center">
           <Icon className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <h4 className="font-bold text-text-main truncate">{title}</h4>
-          <p className="text-xs text-text-muted">{subtitle}</p>
+          <h4 className="font-bold text-foreground truncate">{title}</h4>
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
           {typeof count === 'number' && (
-            <p className="text-[11px] text-text-light mt-1 font-mono">{count} record{count === 1 ? '' : 's'}</p>
+            <p className="text-[11px] text-muted-foreground/60 mt-1 font-mono">{count} record{count === 1 ? '' : 's'}</p>
           )}
         </div>
       </div>
       <button
         onClick={() => handleExport(dataKey)}
         disabled={busy === dataKey}
-        className="mt-auto inline-flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
+        className="mt-auto inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
       >
         {busy === dataKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         Export CSV
@@ -302,10 +305,10 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
     <div className="p-4 sm:p-8 space-y-10">
       {/* HEADER */}
       <div>
-        <h3 className="text-2xl font-black text-text-main underline decoration-primary-500 decoration-4 underline-offset-8">
+        <h3 className="text-2xl font-black text-foreground underline decoration-primary-500 decoration-4 underline-offset-8">
           Import / Export
         </h3>
-        <p className="text-text-muted font-medium mt-2 text-sm">
+        <p className="text-muted-foreground font-medium mt-2 text-sm">
           Backup, share, or seed data using CSV files. Exports always include current live data.
         </p>
       </div>
@@ -313,8 +316,8 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
       {/* EXPORT SECTION */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
-          <Download className="w-5 h-5 text-primary-600" />
-          <h4 className="text-lg font-black text-text-main">Export Data</h4>
+          <Download className="w-5 h-5 text-primary" />
+          <h4 className="text-lg font-black text-foreground">Ekspor Data</h4>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -322,15 +325,15 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
           <ExportCard icon={Database} title="Tracks & Goals" subtitle="All master goals with points & category" dataKey="goals" count={masterGoals?.length} />
           <ExportCard icon={Database} title="Categories" subtitle="Goal category list" dataKey="categories" count={categories?.length} />
           <ExportCard icon={FileText} title="Assigned Tracks (long form)" subtitle="One row per student × goal, with completion" dataKey="tracks_full" />
-          <ExportCard icon={FileText} title="Activity Logs" subtitle="Recent admin & education activity" dataKey="logs" />
+          <ExportCard icon={FileText} title="Log Aktivitas" subtitle="Aktivitas admin & pendidikan terbaru" dataKey="logs" />
         </div>
 
         {/* Stats export */}
-        <div className="bg-base-50 border border-base-200 rounded-2xl p-4 sm:p-5 mt-2">
+        <div className="bg-background border border-border rounded-2xl p-4 sm:p-5 mt-2">
           <div className="flex flex-col sm:flex-row sm:items-end gap-4">
             <div className="flex-1 min-w-0">
-              <h4 className="font-bold text-text-main">Statistics CSV</h4>
-              <p className="text-xs text-text-muted">Export aggregate stats for the selected time range.</p>
+              <h4 className="font-bold text-foreground">Statistics CSV</h4>
+              <p className="text-xs text-muted-foreground">Export aggregate stats for the selected time range.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {([
                   { v: 'today', l: 'Today' },
@@ -344,8 +347,8 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
                     onClick={() => setStatsRange(opt.v)}
                     className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
                       statsRange === opt.v
-                        ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-base-100 text-text-muted border-base-200 hover:border-primary-300'
+                        ? 'bg-primary text-white border-primary-600'
+                        : 'bg-card text-muted-foreground border-border hover:border-primary-300'
                     }`}
                   >{opt.l}</button>
                 ))}
@@ -355,7 +358,7 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
               <button
                 onClick={() => handleExport('stats_overview')}
                 disabled={busy === 'stats_overview'}
-                className="inline-flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
+                className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
               >
                 {busy === 'stats_overview' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Overview
@@ -363,7 +366,7 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
               <button
                 onClick={() => handleExport('stats_chart')}
                 disabled={busy === 'stats_chart'}
-                className="inline-flex items-center justify-center gap-2 bg-base-100 border border-base-200 text-text-main hover:bg-base-200 font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
+                className="inline-flex items-center justify-center gap-2 bg-card border border-border text-foreground hover:bg-secondary font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11"
               >
                 {busy === 'stats_chart' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Points Trend
@@ -376,14 +379,14 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
       {/* IMPORT SECTION */}
       <section className="space-y-4">
         <div className="flex items-center gap-2">
-          <Upload className="w-5 h-5 text-primary-600" />
-          <h4 className="text-lg font-black text-text-main">Import Data</h4>
+          <Upload className="w-5 h-5 text-primary" />
+          <h4 className="text-lg font-black text-foreground">Impor Data</h4>
         </div>
 
-        <div className="bg-base-50 border border-base-200 rounded-2xl p-4 sm:p-5 space-y-4">
+        <div className="bg-background border border-border rounded-2xl p-4 sm:p-5 space-y-4">
           {/* Type selector */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-text-muted mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
               What does the CSV contain?
             </label>
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
@@ -399,12 +402,12 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
                   onClick={() => { setImportType(opt.v); setImportMessage(null); }}
                   className={`text-left p-3 rounded-xl border-2 transition-all ${
                     importType === opt.v
-                      ? 'border-primary-600 bg-primary-50'
-                      : 'border-base-200 bg-base-100 hover:border-primary-300'
+                      ? 'border-primary-600 bg-primary/10'
+                      : 'border-border bg-card hover:border-primary-300'
                   }`}
                 >
-                  <div className="font-bold text-sm text-text-main">{opt.l}</div>
-                  <div className="text-[11px] text-text-muted mt-0.5">{opt.hint}</div>
+                  <div className="font-bold text-sm text-foreground">{opt.l}</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">{opt.hint}</div>
                 </button>
               ))}
             </div>
@@ -420,13 +423,13 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
                 const f = e.target.files?.[0];
                 if (f) onFilePicked(f);
               }}
-              className="block w-full text-sm text-text-muted file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-base-100 file:text-text-main file:border file:border-base-200 hover:file:bg-base-200 file:cursor-pointer"
+              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-card file:text-foreground file:border file:border-border hover:file:bg-secondary file:cursor-pointer"
             />
             {previewRows && (
               <button
                 onClick={runImport}
                 disabled={busy === 'import'}
-                className="inline-flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11 shrink-0"
+                className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11 shrink-0"
               >
                 {busy === 'import' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 Import {previewRows.length} row{previewRows.length === 1 ? '' : 's'}
@@ -448,31 +451,31 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
 
           {/* Preview */}
           {previewRows && previewRows.length > 0 && (
-            <div className="border border-base-200 rounded-xl overflow-hidden">
-              <div className="px-3 py-2 bg-base-100 border-b border-base-200 text-xs font-bold text-text-muted">
+            <div className="border border-border rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-card border-b border-border text-xs font-bold text-muted-foreground">
                 Preview · {previewRows.length} row{previewRows.length === 1 ? '' : 's'} · {previewHeaders.length} column{previewHeaders.length === 1 ? '' : 's'}
               </div>
               <div className="overflow-x-auto max-h-72">
                 <table className="w-full text-xs">
-                  <thead className="bg-base-50 sticky top-0">
+                  <thead className="bg-background sticky top-0">
                     <tr>
                       {previewHeaders.map((h) => (
-                        <th key={h} className="text-left font-bold text-text-main px-3 py-2 whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left font-bold text-foreground px-3 py-2 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {previewRows.slice(0, 25).map((r, i) => (
-                      <tr key={i} className="border-t border-base-200">
+                      <tr key={i} className="border-t border-border">
                         {previewHeaders.map((h) => (
-                          <td key={h} className="px-3 py-1.5 text-text-muted whitespace-nowrap max-w-[220px] truncate">{r[h]}</td>
+                          <td key={h} className="px-3 py-1.5 text-muted-foreground whitespace-nowrap max-w-[220px] truncate">{r[h]}</td>
                         ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 {previewRows.length > 25 && (
-                  <div className="px-3 py-2 text-[11px] text-text-light bg-base-50 border-t border-base-200">
+                  <div className="px-3 py-2 text-[11px] text-muted-foreground/60 bg-background border-t border-border">
                     …and {previewRows.length - 25} more rows
                   </div>
                 )}
@@ -481,7 +484,7 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
           )}
 
           {/* Hint */}
-          <div className="text-[11px] text-text-light leading-relaxed">
+          <div className="text-[11px] text-muted-foreground/60 leading-relaxed">
             Tip: Export a sample first to see the exact column format expected. New records are always added (no duplicate check).
           </div>
         </div>

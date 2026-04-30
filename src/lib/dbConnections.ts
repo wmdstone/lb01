@@ -4,37 +4,79 @@
 // localStorage and is used by firebaseApi.ts via getActiveClient().
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { supabase as defaultClient } from "@/integrations/supabase/client";
+import { supabase as defaultClient } from '../integrations/supabase/client';
+import {
+  connectFirestore,
+  testFirestore,
+  parseFirebaseConfig,
+  fsSelect,
+  fsInsert,
+  fsUpdate,
+  fsDeleteAll,
+  fsDeleteById,
+  disposeFirestore,
+  FIREBASE_APP_COLLECTIONS,
+  bootstrapFirestoreSchema,
+  fsTransfer,
+  type FirestoreCollectionProbe,
+  type FirestoreWriteMode,
+  type FirebaseConfig,
+} from './firestoreDriver';
+
+export type { FirestoreCollectionProbe, FirestoreWriteMode } from './firestoreDriver';
+
+export type DbProvider = "supabase" | "firebase";
+export type DbKeyType = "service_role" | "publishable" | "unknown";
 
 export type DbConnection = {
   id: string;
   label: string;
   url: string;
   key: string; // service role or anon key (user-supplied)
+  provider?: DbProvider; // defaults to "supabase" for backwards compat
+  firebaseConfig?: FirebaseConfig; // populated for provider==="firebase"
   isDefault?: boolean;
   createdAt?: string;
 };
 
 const STORAGE_KEY = "janki_db_connections_v1";
 const ACTIVE_KEY = "janki_db_active_v1";
-const DEFAULT_ID = "lovable-cloud";
+const DEFAULT_ID = "lovable-cloud-firebase";
 
+export const DEFAULT_CONNECTION_ID = DEFAULT_ID;
 export const DB_EVENTS = {
   CHANGED: "db-connection-changed",
 };
 
-export type DbKeyType = "publishable" | "service_role" | "unknown";
 
-const DEFAULT_URL = (import.meta as any).env?.VITE_SUPABASE_URL || "";
-const DEFAULT_KEY = (import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+
+// Fallbacks for backwards compatibility
+const DEFAULT_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  "https://xmsjbzujyfrkecgwfxlc.supabase.co";
+const DEFAULT_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_NK7ByKJ_l2qizNoICxrnXQ_-2zTWOiE";
 
 const defaultConnection: DbConnection = {
   id: DEFAULT_ID,
-  label: "Lovable Cloud (default)",
-  url: DEFAULT_URL,
-  key: DEFAULT_KEY,
+  label: "Firebase — gen-lang-client-0351002450",
+  url: "firestore://" + "gen-lang-client-0351002450",
+  key: "{\"projectId\":\"gen-lang-client-0351002450\",\"appId\":\"1:120685709098:web:09eeb8e2dbd550eb3bc053\",\"apiKey\":\"AIzaSyB1f7zabwJxQEw_73u89OEeDIwFrRjbFnY\",\"authDomain\":\"gen-lang-client-0351002450.firebaseapp.com\",\"firestoreDatabaseId\":\"ai-studio-04bdc2d3-f530-4d76-abc7-85d55ea3f4f0\",\"storageBucket\":\"gen-lang-client-0351002450.firebasestorage.app\",\"messagingSenderId\":\"120685709098\",\"measurementId\":\"\"}",
+  provider: "firebase",
+  firebaseConfig: {
+  "projectId": "gen-lang-client-0351002450",
+  "appId": "1:120685709098:web:09eeb8e2dbd550eb3bc053",
+  "apiKey": "AIzaSyB1f7zabwJxQEw_73u89OEeDIwFrRjbFnY",
+  "authDomain": "gen-lang-client-0351002450.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-04bdc2d3-f530-4d76-abc7-85d55ea3f4f0",
+  "storageBucket": "gen-lang-client-0351002450.firebasestorage.app",
+  "messagingSenderId": "120685709098",
+  "measurementId": ""
+},
   isDefault: true,
 };
+
 
 // In-memory cache of created clients per connection id
 const clientCache = new Map<string, SupabaseClient>();
@@ -102,6 +144,35 @@ export function addConnection(input: { label: string; url: string; key: string }
     label: input.label.trim() || "External Supabase",
     url: input.url.trim().replace(/\/+$/, ""),
     key: input.key.trim(),
+    provider: "supabase",
+    createdAt: new Date().toISOString(),
+  };
+  const stored = readStored();
+  stored.push(conn);
+  writeStored(stored);
+  window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
+  return conn;
+}
+
+/**
+ * Add a Firebase/Firestore connection. The "key" field stores the raw
+ * stringified config blob so existing code paths (export/import, edit form)
+ * can keep treating it as opaque text.
+ */
+export function addFirebaseConnection(input: {
+  label: string;
+  config: string | FirebaseConfig;
+}): DbConnection {
+  const cfg =
+    typeof input.config === "string" ? parseFirebaseConfig(input.config) : input.config;
+  const id = `fb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const conn: DbConnection = {
+    id,
+    label: input.label.trim() || "Firebase project",
+    url: `firestore://${cfg.projectId}`,
+    key: JSON.stringify(cfg),
+    provider: "firebase",
+    firebaseConfig: cfg,
     createdAt: new Date().toISOString(),
   };
   const stored = readStored();
@@ -116,7 +187,19 @@ export function updateConnection(id: string, patch: Partial<Pick<DbConnection, "
   const stored = readStored();
   const idx = stored.findIndex((c) => c.id === id);
   if (idx < 0) return;
-  stored[idx] = { ...stored[idx], ...patch };
+  const merged = { ...stored[idx], ...patch };
+  // If this is a Firebase connection and the key (config blob) changed,
+  // re-parse and refresh the typed config so subsequent calls use it.
+  if (merged.provider === "firebase" && patch.key) {
+    try {
+      merged.firebaseConfig = parseFirebaseConfig(patch.key);
+      merged.url = `firestore://${merged.firebaseConfig.projectId}`;
+    } catch {
+      /* leave as-is; UI will surface the error on test */
+    }
+    disposeFirestore(id);
+  }
+  stored[idx] = merged;
   writeStored(stored);
   clientCache.delete(id);
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
@@ -127,6 +210,7 @@ export function removeConnection(id: string) {
   const stored = readStored().filter((c) => c.id !== id);
   writeStored(stored);
   clientCache.delete(id);
+  disposeFirestore(id);
   if (getActiveId() === id) setActive(DEFAULT_ID);
   window.dispatchEvent(new CustomEvent(DB_EVENTS.CHANGED, { detail: { id } }));
 }
@@ -168,6 +252,9 @@ function buildRestHeaders(conn: DbConnection, accept = "application/json") {
 export async function listConnectionTables(
   conn: DbConnection,
 ): Promise<{ tables: string[]; error?: string }> {
+  if (conn.provider === "firebase") {
+    return { tables: [...FIREBASE_APP_COLLECTIONS] };
+  }
   // Service-role keys are blocked in the browser. Use the edge proxy.
   if (getConnectionKeyType(conn) === "service_role") {
     try {
@@ -208,7 +295,32 @@ export async function testConnection(
   keyType: DbKeyType;
   tables: string[];
   missingTables: string[];
+  probes?: FirestoreCollectionProbe[];
 }> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || (() => {
+      try { return parseFirebaseConfig(conn.key); } catch { return null; }
+    })();
+    if (!cfg) {
+      return {
+        ok: false,
+        error: "Invalid Firebase config",
+        keyType: "unknown",
+        tables: [],
+        missingTables: expectedTables,
+        probes: [],
+      };
+    }
+    const r = await testFirestore(conn.id, cfg, expectedTables);
+    return {
+      ok: r.ok,
+      error: r.error,
+      keyType: "service_role", // treat firebase as fully-privileged for transfer flow
+      tables: r.ok ? [...FIREBASE_APP_COLLECTIONS] : [],
+      missingTables: r.missingTables,
+      probes: r.probes,
+    };
+  }
   const keyType = getConnectionKeyType(conn);
   try {
     const openApi = await listConnectionTables(conn);
@@ -251,7 +363,7 @@ export async function testConnection(
   }
 }
 
-export const DEFAULT_CONNECTION_ID = DEFAULT_ID;
+
 
 // ---------- Edge-function proxy for service-role operations ----------
 // Service-role (sb_secret_*) keys are rejected by Supabase if used from a
@@ -296,6 +408,10 @@ export async function callProxy(payload: {
 // connection, automatically choosing direct JS client (publishable keys) or
 // the proxy (service-role keys).
 export async function connSelect(conn: DbConnection, table: string): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsSelect(conn.id, cfg, table);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query: "select=*" });
     return Array.isArray(r) ? r : [];
@@ -315,6 +431,13 @@ export async function connSelectQuery(
   table: string,
   query = "select=*",
 ): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    // PostgREST query strings are not honored by Firestore; just return all
+    // rows from the collection. Callers that rely on filters will still get
+    // a usable dataset (caller filters in JS).
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsSelect(conn.id, cfg, table);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({ url: conn.url, key: conn.key, op: "select", table, query });
     return Array.isArray(r) ? r : [];
@@ -335,6 +458,18 @@ export async function connUpdate(
   filter: string,
   patch: Record<string, any>,
 ): Promise<any[]> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    // Translate the simplest PostgREST filter we use everywhere: id=eq.<id>
+    const m = filter.match(/(?:^|&)id=eq\.([^&]+)/);
+    if (!m) {
+      throw new Error(
+        `Firestore connUpdate only supports "id=eq.<id>" filters (got "${filter}")`,
+      );
+    }
+    const updated = await fsUpdate(conn.id, cfg, table, decodeURIComponent(m[1]), patch);
+    return [updated];
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     // Service-role: PATCH via proxy. Add a tiny op via callProxy.update isn't
     // implemented, so we tunnel through the REST endpoint by reusing the
@@ -373,6 +508,10 @@ export async function connInsertReturning(
   rows: any[],
 ): Promise<any[]> {
   if (!rows.length) return [];
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsInsert(conn.id, cfg, table, rows);
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({
       url: conn.url,
@@ -406,6 +545,10 @@ export async function connUpsertReturning(
   onConflict = "id",
 ): Promise<any[]> {
   if (!rows.length) return [];
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    return fsInsert(conn.id, cfg, table, rows, { upsert: true });
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     const r = await callProxy({
       url: conn.url,
@@ -437,6 +580,11 @@ export async function connInsert(
   opts?: { upsert?: boolean; onConflict?: string },
 ): Promise<void> {
   if (!rows.length) return;
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsInsert(conn.id, cfg, table, rows, { upsert: !!opts?.upsert });
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({
       url: conn.url,
@@ -457,6 +605,11 @@ export async function connInsert(
 }
 
 export async function connDeleteAll(conn: DbConnection, table: string): Promise<void> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsDeleteAll(conn.id, cfg, table);
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({ url: conn.url, key: conn.key, op: "delete", table, query: "id=not.is.null" });
     return;
@@ -466,6 +619,11 @@ export async function connDeleteAll(conn: DbConnection, table: string): Promise<
 }
 
 export async function connDeleteById(conn: DbConnection, table: string, id: string): Promise<void> {
+  if (conn.provider === "firebase") {
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    await fsDeleteById(conn.id, cfg, table, id);
+    return;
+  }
   if (getConnectionKeyType(conn) === "service_role") {
     await callProxy({
       url: conn.url,
@@ -478,6 +636,57 @@ export async function connDeleteById(conn: DbConnection, table: string, id: stri
   }
   const { error } = await getClientFor(conn).from(table).delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Seed a Firebase destination with placeholder documents so the canonical app
+ * collections are visible in the Firestore console. No-op for Supabase
+ * destinations.
+ */
+export async function bootstrapFirebaseSchema(
+  conn: DbConnection,
+  collections: string[] = FIREBASE_APP_COLLECTIONS,
+) {
+  if (conn.provider !== "firebase") {
+    throw new Error("bootstrapFirebaseSchema only supports Firebase connections");
+  }
+  const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+  return bootstrapFirestoreSchema(conn.id, cfg, collections);
+}
+
+/**
+ * Document-aware transfer for Firestore destinations. Honors id preservation
+ * and per-document conflict rules (merge / replace / skip). Falls back to the
+ * generic `connInsert` path for Supabase destinations.
+ */
+export async function connTransferRows(
+  dest: DbConnection,
+  table: string,
+  rows: any[],
+  opts: {
+    mode: "upsert" | "replace" | "skip";
+    /** When true and dest is Supabase, wipe destination table first. */
+    wipeBeforeReplace?: boolean;
+  },
+): Promise<{ written: number; skipped: number; created: number; errors: string[] }> {
+  if (dest.provider === "firebase") {
+    const cfg = dest.firebaseConfig || parseFirebaseConfig(dest.key);
+    const fsMode: FirestoreWriteMode =
+      opts.mode === "replace" ? "replace" : opts.mode === "skip" ? "skip" : "merge";
+    return fsTransfer(dest.id, cfg, table, rows, fsMode);
+  }
+  // Supabase path: replace = wipe + insert; skip not supported (PostgREST has
+  // no native "do nothing on conflict" via REST), so it degrades to upsert.
+  if (opts.mode === "replace" && opts.wipeBeforeReplace) {
+    await connDeleteAll(dest, table);
+  }
+  if (rows.length) {
+    await connInsert(dest, table, rows, {
+      upsert: opts.mode !== "replace" || !opts.wipeBeforeReplace,
+      onConflict: "id",
+    });
+  }
+  return { written: rows.length, skipped: 0, created: 0, errors: [] };
 }
 
 // SQL used to bootstrap the destination project with the same tables the

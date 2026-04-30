@@ -16,29 +16,29 @@ export interface TimeRangeOption {
 }
 
 export const TIME_RANGE_OPTIONS: TimeRangeOption[] = [
-  { value: TIME_RANGE.ALL_TIME, label: 'All-Time', shortLabel: 'All-Time' },
-  { value: TIME_RANGE.MONTHLY,  label: 'Monthly',  shortLabel: 'Monthly'  },
-  { value: TIME_RANGE.WEEKLY,   label: 'Weekly',   shortLabel: 'Weekly'   },
+  { value: TIME_RANGE.ALL_TIME, label: 'Sepanjang waktu', shortLabel: 'Semua' },
+  { value: TIME_RANGE.MONTHLY,  label: 'Bulanan',  shortLabel: 'Bulanan'  },
+  { value: TIME_RANGE.WEEKLY,   label: 'Mingguan',   shortLabel: 'Mingguan'   },
 ];
 
 export const POINTS_CAPTION = {
-  ALL_TIME: 'All-Time Pts',
-  MONTHLY: 'Monthly Pts',
-  WEEKLY: 'Weekly Pts',
+  ALL_TIME: 'Total Poin',
+  MONTHLY: 'Poin Bulanan',
+  WEEKLY: 'Poin Mingguan',
 } as const;
 
 export const STATS_CAPTION = {
-  STUDENTS: 'All-Time Students',
-  ACTIVE_GOALS: 'Active Goals',
-  UNIQUE_VIEWS: 'All-Time Unique Views',
-  POINTS_DISTRIBUTED: 'All-Time Points Distributed',
+  STUDENTS: 'Total Siswa',
+  ACTIVE_GOALS: 'Tujuan Aktif',
+  UNIQUE_VIEWS: 'Total Tayangan Unik',
+  POINTS_DISTRIBUTED: 'Total Poin Didistribusikan',
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chart-level filter presets used by the reusable <TimeRangeFilter /> component.
 // Charts share these so wording stays consistent everywhere a time range is shown.
 
-export type RangePreset = 'last-week' | 'last-month' | 'last-year' | 'all-time' | 'custom';
+export type RangePreset = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'last-3-months' | 'last-6-months' | 'last-year' | 'all-time' | 'custom';
 
 export interface RangePresetOption {
   value: RangePreset;
@@ -46,11 +46,15 @@ export interface RangePresetOption {
 }
 
 export const RANGE_PRESET_OPTIONS: RangePresetOption[] = [
-  { value: 'last-week',  label: 'Last week'  },
-  { value: 'last-month', label: 'Last month' },
-  { value: 'last-year',  label: 'Last year'  },
-  { value: 'all-time',   label: 'All-time'   },
-  { value: 'custom',     label: 'Custom range' },
+  { value: 'this-week',  label: 'Minggu ini'  },
+  { value: 'last-week',  label: 'Minggu lalu'  },
+  { value: 'this-month', label: 'Bulan ini' },
+  { value: 'last-month', label: 'Bulan lalu' },
+  { value: 'last-3-months', label: '3 bulan lalu' },
+  { value: 'last-6-months', label: '6 bulan lalu' },
+  { value: 'last-year',  label: 'Tahun lalu'  },
+  { value: 'all-time',   label: 'Sepanjang waktu'   },
+  { value: 'custom',     label: 'Rentang kustom' },
 ];
 
 export interface DateRange {
@@ -79,8 +83,16 @@ export function presetToRange(preset: RangePreset, now: Date = new Date()): Date
 
   const end = endOfDay(now);
   const start = new Date(now);
+  if (preset === 'this-week') {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+  }
   if (preset === 'last-week')  start.setDate(now.getDate() - 6);   // 7-day window incl. today
+  if (preset === 'this-month') start.setDate(1);
   if (preset === 'last-month') start.setDate(now.getDate() - 29);  // 30-day window
+  if (preset === 'last-3-months') start.setMonth(now.getMonth() - 3);
+  if (preset === 'last-6-months') start.setMonth(now.getMonth() - 6);
   if (preset === 'last-year')  start.setFullYear(now.getFullYear() - 1);
   return { start: startOfDay(start), end };
 }

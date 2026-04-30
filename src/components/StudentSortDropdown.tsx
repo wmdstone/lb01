@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowDownUp, ArrowDown, ArrowUp, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export type SortKey = 'points' | 'name' | 'newest' | 'oldest';
 
@@ -11,10 +12,10 @@ export interface SortOption {
 }
 
 export const DEFAULT_SORT_OPTIONS: SortOption[] = [
-  { value: 'points', label: 'Points (high → low)', direction: 'desc' },
-  { value: 'name', label: 'Name (A → Z)', direction: 'asc' },
-  { value: 'newest', label: 'Newest first', direction: 'desc' },
-  { value: 'oldest', label: 'Oldest first', direction: 'asc' },
+  { value: 'points', label: 'Poin (tinggi → rendah)', direction: 'desc' },
+  { value: 'name', label: 'Nama (A → Z)', direction: 'asc' },
+  { value: 'newest', label: 'Terbaru', direction: 'desc' },
+  { value: 'oldest', label: 'Terlama', direction: 'asc' },
 ];
 
 interface Props {
@@ -49,24 +50,25 @@ export function StudentSortDropdown({
   const current = options.find((o) => o.value === value) || options[0];
   const isDark = variant === 'dark';
 
-  const btnCls = isDark
-    ? 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-50/20 bg-base-900/30 text-base-50 hover:bg-base-900/50 backdrop-blur-md text-sm font-bold transition-all whitespace-nowrap'
-    : 'w-full sm:w-auto min-h-11 flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-base-200 bg-base-100 text-text-main hover:border-primary-300 text-sm font-bold transition-all whitespace-nowrap';
-
   const DirIcon = current.direction === 'asc' ? ArrowUp : current.direction === 'desc' ? ArrowDown : ArrowDownUp;
 
   return (
     <div className={`relative min-w-0 ${className}`} ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className={btnCls}>
-        <ArrowDownUp className="h-4 w-4 opacity-70 shrink-0" />
-        <span className="hidden sm:inline">Sort:</span>
-        <span className="truncate">{current.label.split(' (')[0]}</span>
-        <DirIcon className="h-3.5 w-3.5 opacity-70 shrink-0" />
-      </button>
+      <Button
+        variant={isDark ? 'secondary' : 'outline'}
+        onClick={() => setOpen((o) => !o)}
+        className={`w-full sm:w-auto h-12 sm:h-10 rounded-2xl sm:rounded-xl shadow-soft font-bold gap-2 border-none active:scale-95 transition-all ${
+          isDark ? 'bg-secondary/30 backdrop-blur-md hover:bg-secondary/50' : 'bg-background hover:bg-secondary/50'
+        }`}
+      >
+        <ArrowDownUp className="h-4 w-4" />
+        <span>Urutkan</span>
+        <DirIcon className="h-4 w-4" />
+      </Button>
       {open && (
-        <div className="absolute right-0 mt-2 w-[min(15rem,calc(100vw-2rem))] bg-base-100 border border-base-200 rounded-2xl shadow-2xl z-50 p-2">
-          <div className="text-[10px] font-black uppercase tracking-widest text-text-light px-3 pt-1 pb-2">
-            Sort by
+        <div className="absolute left-0 mt-2 w-48 sm:w-56 bg-card border-none rounded-2xl shadow-soft z-50 p-1.5 sm:p-2 animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-3 pt-1 pb-2">
+            Urutkan berdasarkan
           </div>
           {options.map((opt) => {
             const active = opt.value === value;
@@ -81,8 +83,8 @@ export function StudentSortDropdown({
                 }}
                 className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-left text-sm transition-colors ${
                   active
-                    ? 'bg-primary-50 text-primary-700 font-bold'
-                    : 'hover:bg-base-200/50 text-text-main'
+                    ? 'bg-primary/10 text-primary-700 font-bold'
+                    : 'hover:bg-secondary/50 text-foreground'
                 }`}
               >
                 <span className="flex items-center gap-2 min-w-0">

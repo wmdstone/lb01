@@ -2,7 +2,7 @@
 // Captures: page visits, leaderboard filter changes, profile opens, admin login.
 // Each browser gets a stable session_id stored in localStorage.
 
-import { supabase } from "@/integrations/supabase/client";
+import { apiFetch } from './api';
 
 const SESSION_KEY = "app_session_id";
 
@@ -47,14 +47,18 @@ export async function trackEvent(
   opts: TrackOptions = {},
 ): Promise<void> {
   try {
-    await supabase.from("app_events").insert({
-      event_type: eventType,
-      path: typeof window !== "undefined" ? window.location.pathname + window.location.hash : null,
-      device: detectDevice(),
-      is_admin: opts.isAdmin ?? cachedAdmin,
-      session_id: getSessionId(),
-      ref_id: opts.refId ?? null,
-      metadata: opts.metadata ?? {},
+    await apiFetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event_type: eventType,
+        path: typeof window !== "undefined" ? window.location.pathname + window.location.hash : null,
+        device: detectDevice(),
+        is_admin: opts.isAdmin ?? cachedAdmin,
+        session_id: getSessionId(),
+        ref_id: opts.refId ?? null,
+        metadata: opts.metadata ?? {},
+      })
     });
   } catch (e) {
     // Never let analytics break UX.

@@ -1,12 +1,6 @@
 {
-  "name": "Student Success Hub",
-  "description": "A production-ready student achievement tracker with secure admin panel, real-time leaderboard, and mobile-optimized experience.",
+  "name": "PPMH",
+  "description": "An application environment for importing, migrating, and optimizing GitHub repositories for AI Studio.",
   "requestFramePermissions": [],
-  "majorCapabilities": [
-    "Permanent Cloud Storage",
-    "Admin Authentication",
-    "Progress Tracking",
-    "Mobile Responsive Design",
-    "RESTful API"
-  ]
+  "majorCapabilities": []
 }
