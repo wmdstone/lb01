@@ -17,6 +17,7 @@ import {
   markConnectionFailed,
   DEFAULT_CONNECTION_ID,
 } from './dbConnections';
+import { readCache, writeCache } from './localCache';
 
 // --- Admin password (presentation-level) ---
 const ADMIN_PASSWORD = "janki_app";
@@ -521,23 +522,61 @@ export async function firebaseApiFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const conn = getActiveConnection();
+  const method = (init.method || 'GET').toUpperCase();
+  const path = url.split('?')[0];
+  const isCacheableRead =
+    method === 'GET' &&
+    (path === '/api/students' ||
+      path === '/api/categories' ||
+      path === '/api/masterGoals' ||
+      path === '/api/settings' ||
+      path === '/api/admin_users' ||
+      path === '/api/posts' ||
+      path === '/api/logs' ||
+      path === '/api/events');
+  const cacheScope = isCacheableRead ? `read::${url}` : null;
+
+  const finalize = async (res: Response) => {
+    if (cacheScope && res.ok) {
+      try {
+        const clone = res.clone();
+        const data = await clone.json();
+        writeCache(conn.id, cacheScope, data);
+      } catch {}
+    }
+    return res;
+  };
+
   try {
     const res = await runRouter(url, init, conn);
     if (res.status >= 500 && conn.id !== DEFAULT_CONNECTION_ID) {
-      // Treat 500s from a non-default backend as a connection failure so we
-      // don't keep hammering it on every refetch.
-      throw new Error("backend 5xx");
+      throw new Error('backend 5xx');
     }
-    return res;
+    return finalize(res);
   } catch (err: any) {
+    // 1) Try cached read so UI never shows blank when remote is unreachable.
+    if (cacheScope) {
+      const cached = readCache<any>(conn.id, cacheScope);
+      if (cached !== null) {
+        console.warn(
+          `[firebaseApiFetch] ${url} failed; serving local cache for ${conn.id}.`,
+          err?.message || err,
+        );
+        return new Response(JSON.stringify(cached), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'X-Local-Cache': '1' },
+        });
+      }
+    }
+    // 2) Fallback to default connection if the active one is broken.
     if (conn.id !== DEFAULT_CONNECTION_ID) {
       console.warn(
         `[firebaseApiFetch] active connection ${conn.id} failed, falling back to default`,
         err?.message || err,
       );
       markConnectionFailed(conn.id);
-      // Retry with the default connection
-      return runRouter(url, init, getActiveConnection());
+      const res = await runRouter(url, init, getActiveConnection());
+      return finalize(res);
     }
     throw err;
   }
