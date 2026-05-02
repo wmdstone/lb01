@@ -135,7 +135,7 @@ export function LandingPage() {
             </h1>
             <div className="mt-6 max-w-2xl mx-auto">
               <p className="font-serif-body italic text-lg md:text-xl text-foreground/70 leading-relaxed">
-                Pusat data, pencapaian santri, dan berita terkini Pondok Pesantren Miftahul Huda — disajikan dengan keterbukaan dan kejernihan.
+                Pusat data, pencapaian santri, dan berita terkini Pondok Pesantren Manba'ul Huda — disajikan dengan keterbukaan dan kejernihan.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
@@ -143,7 +143,7 @@ export function LandingPage() {
                 <Trophy className="w-4 h-4 mr-2" /> Leaderboard
               </Link>
               <Link href="/blog" className="px-7 py-3 border-2 border-foreground text-foreground font-bold uppercase tracking-widest text-xs hover:bg-foreground hover:text-background transition-colors w-full sm:w-auto inline-flex justify-center items-center">
-                <BookOpen className="w-4 h-4 mr-2" /> Baca Insight
+                <BookOpen className="w-4 h-4 mr-2" /> Baca Berita
               </Link>
             </div>
           </motion.div>
