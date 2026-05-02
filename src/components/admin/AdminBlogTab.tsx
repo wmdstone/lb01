@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Globe, EyeOff, Check, X, ShieldAlert } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Plus, Edit2, Trash2, Globe, EyeOff, X, Download, Upload, RefreshCw } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../lib/api';
 import { Button } from '../ui/button';
@@ -11,13 +11,34 @@ import { ColumnDef } from '@tanstack/react-table';
 import type { Post, AdminUser } from '../../lib/types';
 import { TiptapEditor } from './TiptapEditor';
 import { useAuthRole } from '@/hooks/useAuthRole';
-import Image from 'next/image';
+import { ImageWithFallback } from '../ui/ImageWithFallback';
+import { useToast } from '@/hooks/use-toast';
+import { exportFullSnapshot, downloadExportFile, parseImportFile, importData, validateImportData } from '@/services/exportImportService';
+import { clearCache } from '@/lib/localCache';
 
 export function AdminBlogTab() {
   const queryClient = useQueryClient();
   const { isSuperAdmin } = useAuthRole();
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState<Partial<Post> | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [pendingImportData, setPendingImportData] = useState<unknown>(null);
+
+  // Cache invalidation helper - ensures Landing Page and Blog Page get fresh data
+  const invalidateAllCaches = useCallback(() => {
+    // Clear local cache for the connection
+    try { clearCache(); } catch {}
+    
+    // Invalidate React Query caches
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+    
+    // Trigger router refresh for SSR pages would happen via revalidatePath on the server
+    // For client-side, invalidateQueries handles this
+  }, [queryClient]);
 
   const { data: posts = [], isLoading } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -56,8 +77,9 @@ export function AdminBlogTab() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      invalidateAllCaches();
       setIsEditing(null);
+      toast({ title: 'Berhasil', description: 'Artikel berhasil disimpan.' });
     }
   });
 
@@ -67,10 +89,136 @@ export function AdminBlogTab() {
       if (!res.ok) throw new Error('Failed to delete post');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      invalidateAllCaches();
       setDeleteConfirmId(null);
+      toast({ title: 'Berhasil', description: 'Artikel berhasil dihapus.' });
     }
   });
+
+  // Export handler
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const result = await exportFullSnapshot({
+        includeActivityLogs: true,
+        includePageViews: true,
+        generateAchievementSnapshot: true,
+      });
+      
+      if (result.success && result.data && result.filename) {
+        downloadExportFile(result.data, result.filename);
+        toast({
+          title: 'Ekspor Berhasil',
+          description: `Data berhasil diekspor ke ${result.filename}`,
+        });
+      } else {
+        toast({
+          title: 'Ekspor Gagal',
+          description: result.error || 'Terjadi kesalahan saat mengekspor data',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Ekspor Gagal',
+        description: String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [toast]);
+
+  // Import file handler
+  const handleImportFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const parseResult = await parseImportFile(file);
+      if (!parseResult.success) {
+        toast({
+          title: 'File Tidak Valid',
+          description: parseResult.error || 'Gagal membaca file',
+          variant: 'destructive',
+        });
+        setIsImporting(false);
+        return;
+      }
+
+      // Validate the data
+      const validation = validateImportData(parseResult.data);
+      if (!validation.valid) {
+        toast({
+          title: 'Data Tidak Valid',
+          description: `Ditemukan ${validation.errors.length} kesalahan validasi`,
+          variant: 'destructive',
+        });
+        setIsImporting(false);
+        return;
+      }
+
+      // Show confirmation modal
+      setPendingImportData(parseResult.data);
+      setImportConfirmOpen(true);
+      setIsImporting(false);
+    } catch (err) {
+      toast({
+        title: 'Impor Gagal',
+        description: String(err),
+        variant: 'destructive',
+      });
+      setIsImporting(false);
+    }
+
+    // Reset input
+    e.target.value = '';
+  }, [toast]);
+
+  // Confirm import
+  const handleConfirmImport = useCallback(async () => {
+    if (!pendingImportData) return;
+
+    setIsImporting(true);
+    setImportConfirmOpen(false);
+
+    try {
+      const result = await importData(pendingImportData, {
+        mode: 'smart_merge',
+        preserveTimestamps: true,
+      });
+
+      if (result.success) {
+        invalidateAllCaches();
+        
+        const stats = result.stats;
+        const totalImported = stats 
+          ? stats.posts.imported + stats.students.imported + stats.categories.imported
+          : 0;
+        
+        toast({
+          title: 'Impor Berhasil',
+          description: `${totalImported} item berhasil diimpor.`,
+        });
+      } else {
+        toast({
+          title: 'Impor Gagal',
+          description: result.error || 'Terjadi kesalahan',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      toast({
+        title: 'Impor Gagal',
+        description: String(err),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsImporting(false);
+      setPendingImportData(null);
+    }
+  }, [pendingImportData, invalidateAllCaches, toast]);
 
   const columns = useMemo<ColumnDef<Post>[]>(() => [
     {
@@ -259,10 +407,16 @@ export function AdminBlogTab() {
               <label className="text-xs font-semibold text-muted-foreground">Gambar Utama (Featured Image)</label>
               {isEditing.featured_image && (
                 <div className="relative w-full h-32 rounded-lg overflow-hidden group border border-border bg-muted">
-                  <Image src={isEditing.featured_image} alt="Featured" fill referrerPolicy="no-referrer" className="object-cover" />
+                  <ImageWithFallback 
+                    src={isEditing.featured_image} 
+                    alt="Featured" 
+                    fill 
+                    className="object-cover"
+                    brandText="PPMH"
+                  />
                   <button 
                     onClick={() => setIsEditing({ ...isEditing, featured_image: '' })}
-                    className="absolute top-2 right-2 bg-foreground/60 p-1.5 rounded-full text-background opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 right-2 bg-foreground/60 p-1.5 rounded-full text-background opacity-0 group-hover:opacity-100 transition-opacity z-10"
                     aria-label="Hapus gambar"
                   >
                     <X className="w-4 h-4" />
@@ -339,9 +493,42 @@ export function AdminBlogTab() {
           <h2 className="text-2xl font-bold flex items-center gap-2">PPMH Insight <Badge className="bg-primary/20 text-primary hover:bg-primary/30">CMS</Badge></h2>
           <p className="text-muted-foreground mt-1 text-sm">Kelola artikel dan konten publikasi pesantren.</p>
         </div>
-        <Button onClick={() => setIsEditing({ status: 'draft' })} className="rounded-xl shadow-primary-glow font-bold gap-2 w-full sm:w-auto">
-          <Plus className="w-5 h-5" /> Tulis Artikel
-        </Button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          {isSuperAdmin && (
+            <>
+              <Button 
+                variant="outline" 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="rounded-xl gap-2"
+              >
+                {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Ekspor
+              </Button>
+              <Button 
+                variant="outline" 
+                className="rounded-xl gap-2 relative"
+                disabled={isImporting}
+                asChild
+              >
+                <label className="cursor-pointer">
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    className="hidden"
+                    onChange={handleImportFile}
+                    disabled={isImporting}
+                  />
+                  {isImporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  Impor
+                </label>
+              </Button>
+            </>
+          )}
+          <Button onClick={() => setIsEditing({ status: 'draft' })} className="rounded-xl shadow-primary-glow font-bold gap-2 w-full sm:w-auto">
+            <Plus className="w-5 h-5" /> Tulis Artikel
+          </Button>
+        </div>
       </div>
 
       <div className="bg-card text-card-foreground rounded-2xl p-6 border border-border shadow-soft">
@@ -359,6 +546,17 @@ export function AdminBlogTab() {
         message="Apakah Anda yakin ingin menghapus artikel ini? Tindakan ini tidak dapat diurungkan."
         onConfirm={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
         onCancel={() => setDeleteConfirmId(null)}
+      />
+
+      <ConfirmModal 
+        isOpen={importConfirmOpen}
+        title="Konfirmasi Impor Data"
+        message="Data yang diimpor akan digabungkan dengan data yang ada. Pastikan file yang diunggah valid dan sesuai format. Lanjutkan?"
+        onConfirm={handleConfirmImport}
+        onCancel={() => {
+          setImportConfirmOpen(false);
+          setPendingImportData(null);
+        }}
       />
     </div>
   );

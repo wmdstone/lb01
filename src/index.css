@@ -92,6 +92,15 @@ html {
   100% { background-position: -200% 0; }
 }
 
+@keyframes shimmer-translate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.animate-shimmer {
+  animation: shimmer-translate 1.5s infinite;
+}
+
 @theme inline {
   --font-heading: 'Playfair Display', 'Source Serif 4', Georgia, serif;
   --font-serif: 'Source Serif 4', 'Playfair Display', Georgia, serif;

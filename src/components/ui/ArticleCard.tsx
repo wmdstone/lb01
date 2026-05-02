@@ -2,10 +2,10 @@
 
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { Clock, TrendingUp } from 'lucide-react';
 import type { Post } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { Thumbnail } from './ImageWithFallback';
 
 function formatDate(d?: string | null) {
   return d
@@ -31,22 +31,12 @@ export function ArticleCard({
       href={`/blog/${post.slug || post.id}`}
       className={cn('group block h-full', className)}
     >
-      {post.featured_image ? (
-        <div className="relative w-full aspect-[4/3] overflow-hidden mb-3 bg-muted">
-          <Image
-            src={post.featured_image}
-            alt={post.title}
-            fill
-            referrerPolicy="no-referrer"
-            sizes="(max-width: 640px) 80vw, (max-width: 1024px) 40vw, 320px"
-            className="object-cover transition-transform duration-700 group-hover:scale-[1.04]"
-          />
-        </div>
-      ) : (
-        <div className="w-full aspect-[4/3] bg-foreground/[0.03] flex items-center justify-center mb-3">
-          <span className="font-display text-foreground/10 text-4xl font-black">PPMH</span>
-        </div>
-      )}
+      <Thumbnail
+        src={post.featured_image}
+        alt={post.title}
+        aspectRatio="4/3"
+        className="mb-3"
+      />
       {post.category && (
         <span className="inline-block text-[10px] uppercase tracking-[0.3em] font-bold text-primary mb-2">
           {post.category}

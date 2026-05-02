@@ -3,6 +3,7 @@ import React from 'react';
 import type { Metadata, Viewport } from "next";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 import { ReactQueryClientProvider } from "@/components/providers/ReactQueryClientProvider";
+import { Toaster } from "@/components/ui/Toaster";
 
 export const metadata: Metadata = {
   title: "Leaderboard Siswa",
@@ -35,6 +36,7 @@ export default function RootLayout({
           <ClientLayout>
             {children}
           </ClientLayout>
+          <Toaster />
         </ReactQueryClientProvider>
       </body>
     </html>
