@@ -22,6 +22,7 @@ const SUPA_PID =
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: ['vm-7sdkytf3t58dmvrhlsfxnl94.vusercontent.net'],
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_SUPABASE_URL: SUPA_URL,
