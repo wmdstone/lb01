@@ -281,3 +281,59 @@ html {
 .dark .editorial-rule {
   background-image: repeating-linear-gradient(to right, hsl(var(--foreground) / 0.4) 0 6px, transparent 6px 10px);
 }
+
+/* ============= Touch & Mobile Optimizations ============= */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+.touch-pan-x {
+  touch-action: pan-x;
+}
+
+.touch-pan-y {
+  touch-action: pan-y;
+}
+
+/* Prevent carousel vertical scroll interference on mobile */
+.embla-carousel {
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Focus-visible states for accessibility */
+.focus-visible-ring:focus-visible {
+  outline: none;
+  ring: 2px;
+  ring-offset: 2px;
+  ring-color: hsl(var(--primary));
+}
+
+/* Smooth transitions for carousel elements */
+@media (prefers-reduced-motion: no-preference) {
+  .carousel-transition {
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .border-border {
+    border-color: currentColor;
+  }
+  
+  .bg-muted {
+    background-color: transparent;
+    border: 1px solid currentColor;
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
