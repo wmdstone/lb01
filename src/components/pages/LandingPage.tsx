@@ -10,7 +10,6 @@ import {
   GraduationCap, Newspaper, Target,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { slugifyCategory } from '../../lib/categorySlug';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
@@ -91,14 +90,6 @@ export function LandingPage() {
   }, [allPosts, activeCat, search, sort]);
 
   const featuredPosts = filteredPosts.slice(0, 8);
-
-  // Group by category for category rails
-  const categoryMap = new Map<string, Post[]>();
-  allPosts.forEach((p) => {
-    const cat = p.category || 'Umum';
-    if (!categoryMap.has(cat)) categoryMap.set(cat, []);
-    categoryMap.get(cat)!.push(p);
-  });
 
   const topStudents = [...students]
     .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
@@ -337,28 +328,6 @@ export function LandingPage() {
         )}
       </section>
 
-      {/* Per-category rails (horizontal) */}
-      {Array.from(categoryMap.entries()).slice(0, 5).map(([catName, catPosts]) => (
-        <section key={catName} className="max-w-6xl mx-auto px-4 md:px-8 pt-14">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <h3 className="font-display text-2xl md:text-3xl font-bold text-foreground">{catName}</h3>
-            <Link
-              href={`/berita/kategori/${slugifyCategory(catName)}`}
-              className="text-primary text-xs font-bold uppercase tracking-widest hover:underline inline-flex items-center"
-            >
-              Lihat Semua <ArrowRight className="w-3 h-3 ml-1" />
-            </Link>
-          </div>
-          <div className="editorial-rule mb-6" />
-          <HScroller ariaLabel={`Kategori ${catName}`}>
-            {catPosts.slice(0, 8).map((post) => (
-              <HScrollItem key={post.id}>
-                <ArticleCard post={post} />
-              </HScrollItem>
-            ))}
-          </HScroller>
-        </section>
-      ))}
     </div>
   );
 }
