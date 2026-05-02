@@ -6,7 +6,18 @@ import { apiFetch } from '../../lib/api';
 import type { Post } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Clock, CalendarDays } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, User } from 'lucide-react';
+
+function formatDate(d?: string | null) {
+  return d ? new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
+}
+
+function readingTime(html?: string) {
+  if (!html) return '1 mnt';
+  const text = html.replace(/<[^>]+>/g, ' ');
+  const words = text.trim().split(/\s+/).length;
+  return `${Math.max(1, Math.round(words / 200))} mnt baca`;
+}
 
 export function BlogPostPage({ slug }: { slug: string }) {
   const { data: post, isLoading } = useQuery<Post>({
@@ -22,77 +33,123 @@ export function BlogPostPage({ slug }: { slug: string }) {
   });
 
   return (
-    <div className="min-h-screen bg-base-50 font-sans pb-20">
-      {/* JSON-LD Schema Placeholder */}
+    <div className="min-h-screen bg-background pb-24">
       {post && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-             __html: JSON.stringify({
-               "@context": "https://schema.org",
-               "@type": "BlogPosting",
-               "headline": post.title,
-               "image": post.featured_image ? [post.featured_image] : [],
-               "datePublished": post.published_at,
-               "dateModified": post.updated_at,
-               "description": post.excerpt || post.title
-             })
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "NewsArticle",
+              "headline": post.title,
+              "image": post.featured_image ? [post.featured_image] : [],
+              "datePublished": post.published_at,
+              "dateModified": post.updated_at,
+              "description": post.excerpt || post.title,
+              "publisher": { "@type": "Organization", "name": "PPMH Insight" }
+            })
           }}
         />
       )}
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-12">
-        <nav className="mb-6 md:mb-10">
-          <Link href="/blog" className="inline-flex items-center text-primary font-bold hover:text-primary-700 transition-colors">
-            <ArrowLeft className="w-4 h-4 mr-2" /> Kembali ke Daftar Artikel
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 md:pt-12">
+        <nav className="mb-8">
+          <Link href="/blog" className="inline-flex items-center text-foreground/70 font-semibold hover:text-foreground transition-colors text-sm uppercase tracking-widest">
+            <ArrowLeft className="w-4 h-4 mr-2" /> PPMH Insight
           </Link>
         </nav>
-        
+
         {isLoading ? (
           <div className="space-y-6 animate-pulse">
-            <div className="h-10 bg-base-200 rounded-lg w-3/4 mb-4" />
-            <div className="h-4 bg-base-200 rounded w-1/4 mb-8" />
-            <div className="space-y-4">
-              <div className="h-4 bg-base-200 rounded w-full" />
-              <div className="h-4 bg-base-200 rounded w-full" />
-              <div className="h-4 bg-base-200 rounded w-5/6" />
-            </div>
+            <div className="h-3 bg-muted/60 w-32" />
+            <div className="h-12 bg-muted/60 w-full" />
+            <div className="h-12 bg-muted/60 w-3/4" />
+            <div className="h-4 bg-muted/60 w-1/3 mt-6" />
           </div>
         ) : !post ? (
-          <div className="text-center py-20 bg-base-0 rounded-3xl border border-border shadow-soft">
-            <h2 className="text-2xl font-bold mb-2">Artikel tidak ditemukan</h2>
+          <div className="text-center py-24 border border-dashed border-border">
+            <h2 className="font-display text-3xl font-bold mb-2">Artikel tidak ditemukan</h2>
+            <p className="text-muted-foreground font-serif-body italic">Mungkin artikel telah dipindahkan atau dihapus.</p>
           </div>
         ) : (
-          <article className="bg-base-0 rounded-3xl border border-border shadow-soft overflow-hidden">
+          <article>
+            {/* Category eyebrow */}
+            {post.category && (
+              <div className="text-center mb-5">
+                <span className="inline-block text-[11px] uppercase tracking-[0.4em] font-bold text-primary border-y border-primary py-1.5 px-4">
+                  {post.category}
+                </span>
+              </div>
+            )}
+
+            {/* Headline */}
+            <header className="text-center max-w-3xl mx-auto mb-6">
+              <h1 className="font-display text-4xl sm:text-5xl md:text-6xl font-black text-foreground leading-[1.05] tracking-tight">
+                {post.title}
+              </h1>
+              {post.excerpt && (
+                <p className="font-serif-body italic text-lg md:text-xl text-foreground/70 mt-5 leading-relaxed">
+                  {post.excerpt}
+                </p>
+              )}
+            </header>
+
+            {/* Byline */}
+            <div className="flex items-center justify-center gap-6 text-xs uppercase tracking-widest text-muted-foreground font-semibold border-y border-border py-4 mb-10">
+              {(post.author_id || (post as any).author) && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <User className="w-3.5 h-3.5" />
+                    <span>{(post as any).author || post.author_id}</span>
+                  </div>
+                  <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+                </>
+              )}
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-3.5 h-3.5" />
+                <time dateTime={post.published_at || ''}>{formatDate(post.published_at)}</time>
+              </div>
+              <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+              <div className="flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{readingTime(post.content)}</span>
+              </div>
+            </div>
+
+            {/* Featured image */}
             {post.featured_image && (
-              <figure className="w-full h-64 md:h-96 lg:h-[480px] relative bg-base-200 m-0">
-                <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" className="object-cover" />
+              <figure className="mb-12 -mx-4 sm:mx-0">
+                <div className="relative w-full aspect-[16/9] bg-muted overflow-hidden">
+                  <Image src={post.featured_image} alt={post.title} fill referrerPolicy="no-referrer" priority className="object-cover" />
+                </div>
+                <figcaption className="text-xs text-muted-foreground italic font-serif-body text-center mt-3 px-4">
+                  {post.title}
+                </figcaption>
               </figure>
             )}
-            
-            <div className="p-6 sm:p-8 md:p-12 lg:p-16">
-              <header className="mb-10 text-center">
-                 {post.category && (
-                    <span className="inline-block px-4 py-1.5 bg-primary/10 text-primary-700 text-sm font-bold rounded-full mb-6 uppercase tracking-wider">
-                      {post.category}
-                    </span>
-                  )}
-                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-foreground mb-6 font-serif leading-tight">
-                  {post.title}
-                </h1>
-                
-                <div className="flex flex-wrap items-center justify-center gap-4 text-sm md:text-base font-medium text-muted-foreground">
-                  <div className="flex items-center">
-                    <CalendarDays className="w-5 h-5 mr-2 text-primary" />
-                    <time dateTime={post.published_at || new Date().toISOString()}>{post.published_at ? new Date(post.published_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</time>
-                  </div>
-                </div>
-              </header>
 
-              <section 
-                className="prose prose-sm sm:prose-base md:prose-lg dark:prose-invert prose-img:mx-auto prose-img:rounded-2xl max-w-none text-foreground/90 font-serif leading-relaxed prose-headings:font-sans prose-headings:font-bold prose-a:text-primary hover:prose-a:text-primary-700 mx-auto"
-                dangerouslySetInnerHTML={{ __html: post.content }}
-              />
+            {/* Body — drop cap, serif body */}
+            <section
+              className="dropcap font-serif-body text-foreground/90 prose prose-lg max-w-none
+                         prose-headings:font-display prose-headings:font-bold prose-headings:text-foreground
+                         prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-4
+                         prose-h3:text-2xl
+                         prose-p:leading-[1.85] prose-p:text-[1.075rem]
+                         prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                         prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:font-display prose-blockquote:italic prose-blockquote:text-2xl prose-blockquote:text-foreground
+                         prose-img:rounded-none prose-img:mx-auto"
+              dangerouslySetInnerHTML={{ __html: post.content }}
+            />
+
+            {/* End mark */}
+            <div className="text-center mt-16 mb-8">
+              <span className="inline-block w-2 h-2 bg-foreground rotate-45" />
+            </div>
+
+            <div className="text-center">
+              <Link href="/blog" className="inline-flex items-center text-foreground font-semibold uppercase tracking-widest text-xs border-b border-foreground pb-1 hover:text-primary hover:border-primary transition-colors">
+                Kembali ke PPMH Insight
+              </Link>
             </div>
           </article>
         )}

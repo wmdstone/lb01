@@ -36,6 +36,32 @@ const fail = (status: number, message: string): Response =>
     headers: { "Content-Type": "application/json" },
   });
 
+// Normalize DB row (cover_image, author) → Post type (featured_image, author_id)
+function normalizePostRow(r: any): any {
+  if (!r) return r;
+  return {
+    ...r,
+    featured_image: r.featured_image || r.cover_image || '',
+    author_id: r.author_id || r.author || '',
+    cover_image: undefined,
+    author: r.author || r.author_id || '',
+  };
+}
+
+// Normalize incoming post body for DB write (featured_image → also set cover_image, etc.)
+function normalizePostWrite(body: any): any {
+  const out = { ...body };
+  // Map featured_image → cover_image for DB compatibility
+  if (out.featured_image !== undefined) {
+    out.cover_image = out.featured_image;
+  }
+  // Map author_id → author for DB compatibility
+  if (out.author_id !== undefined) {
+    out.author = out.author_id;
+  }
+  return out;
+}
+
 // Run an array of async tasks with a hard concurrency cap. Used to throttle
 // bulk operations (rank snapshots, bulk imports) that would otherwise fire
 // hundreds of parallel writes and exhaust connection pools / hit rate limits
@@ -458,9 +484,13 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
       ).catch(() => []);
       return ok(rows);
     }
-    if (path === "/api/events" && method === "POST") { 
-      await connInsertReturning(conn, "app_events", [{ id: "evt-"+Date.now(), ...body }]).catch(()=>[]); 
-      return ok({success: true}); 
+    if (path === "/api/events" && method === "POST") {
+      // Do NOT pass a custom string id — `app_events.id` is uuid with a
+      // gen_random_uuid() default. Strip any client-supplied id to let the
+      // database generate a valid UUID.
+      const { id: _ignored, ...eventBody } = (body ?? {}) as Record<string, unknown>;
+      await connInsertReturning(conn, "app_events", [eventBody]).catch(() => []);
+      return ok({ success: true });
     }
 
     // ===== STATS =====
@@ -476,28 +506,29 @@ async function runRouter(url: string, init: RequestInit, conn: any): Promise<Res
       if (method === "GET") {
         let rows = [];
         try { rows = await connSelectQuery(conn, "posts", "select=*&order=created_at.desc") || []; }catch(e){}
-        return ok(rows);
+        return ok((rows as any[]).map(normalizePostRow));
       }
       if (method === "POST") {
-        const input = {
-          id: Date.now().toString(),
+        const input = normalizePostWrite({
           ...body,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        };
+        });
+        // Remove client-side id to let DB generate UUID
+        delete (input as any).id;
         const rows = await connInsertReturning(conn, "posts", [input]);
         logAction("Artikel Dibuat", `Admin membuat artikel baru: ${input.title}`, "system");
-        return ok(rows?.[0] || input);
+        return ok(normalizePostRow(rows?.[0] || input));
       }
     }
     const postMatch = path.match(/^\/api\/posts\/([^/]+)$/);
     if (postMatch) {
       const id = postMatch[1];
       if (method === "PUT") {
-        const input = { ...body, updated_at: new Date().toISOString() };
+        const input = normalizePostWrite({ ...body, updated_at: new Date().toISOString() });
         const rows = await connUpdate(conn, "posts", `id=eq.${id}`, input);
         logAction("Artikel Diperbarui", `Admin memperbarui artikel: ${input.title || id}`, "system");
-        return ok(rows?.[0] || { id, ...input });
+        return ok(normalizePostRow(rows?.[0] || { id, ...input }));
       }
       if (method === "DELETE") {
         await connDeleteById(conn, "posts", id);
