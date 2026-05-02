@@ -6,7 +6,7 @@ import { apiFetch } from '../../lib/api';
 import type { Post } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, CalendarDays, Clock, User } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, User, ArrowRight } from 'lucide-react';
 
 function formatDate(d?: string | null) {
   return d ? new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
@@ -20,6 +20,16 @@ function readingTime(html?: string) {
 }
 
 export function BlogPostPage({ slug }: { slug: string }) {
+  const { data: allPosts = [] } = useQuery<Post[]>({
+    queryKey: ['public-posts'],
+    queryFn: async () => {
+      const res = await apiFetch('/api/posts');
+      if (!res.ok) throw new Error('Failed to fetch posts');
+      const all: Post[] = await res.json();
+      return all.filter((p) => p.status === 'published');
+    },
+  });
+
   const { data: post, isLoading } = useQuery<Post>({
     queryKey: ['public-post', slug],
     queryFn: async () => {
@@ -32,8 +42,52 @@ export function BlogPostPage({ slug }: { slug: string }) {
     }
   });
 
+  // Reading progress (sticky bar at top)
+  const [progress, setProgress] = React.useState(0);
+  React.useEffect(() => {
+    const onScroll = () => {
+      const h = document.documentElement;
+      const scrolled = h.scrollTop;
+      const max = h.scrollHeight - h.clientHeight;
+      setProgress(max > 0 ? Math.min(100, Math.max(0, (scrolled / max) * 100)) : 0);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  // Related posts (same category, exclude current). Fallback to most recent.
+  const related = React.useMemo(() => {
+    if (!post) return [];
+    const others = allPosts.filter((p) => p.id !== post.id);
+    const sameCat = others.filter((p) => (p.category || '') === (post.category || ''));
+    const pool = sameCat.length >= 3 ? sameCat : [...sameCat, ...others.filter((p) => !sameCat.includes(p))];
+    return pool
+      .sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''))
+      .slice(0, 3);
+  }, [post, allPosts]);
+
   return (
     <div className="min-h-screen bg-background pb-24">
+      {/* Reading progress bar */}
+      <div
+        role="progressbar"
+        aria-label="Progres baca"
+        aria-valuenow={Math.round(progress)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className="fixed top-0 left-0 right-0 h-1 z-[60] bg-transparent pointer-events-none"
+      >
+        <div
+          className="h-full bg-primary transition-[width] duration-150 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
       {post && (
         <script
           type="application/ld+json"
@@ -151,6 +205,69 @@ export function BlogPostPage({ slug }: { slug: string }) {
                 Kembali ke PPMH Insight
               </Link>
             </div>
+
+            {/* Related Posts */}
+            {related.length > 0 && (
+              <aside className="mt-20 pt-10 border-t border-border" aria-label="Saran postingan lain">
+                <div className="flex items-end justify-between gap-4 mb-6">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground mb-2">
+                      Lanjutkan Membaca
+                    </p>
+                    <h2 className="font-display text-2xl md:text-3xl font-black text-foreground">
+                      Saran Postingan Lain
+                    </h2>
+                  </div>
+                  <Link href="/blog" className="hidden sm:inline-flex items-center text-foreground font-bold uppercase tracking-widest text-xs border-b border-foreground hover:text-primary hover:border-primary pb-1">
+                    Semua Artikel <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  </Link>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {related.map((rp) => (
+                    <Link
+                      key={rp.id}
+                      href={`/blog/${rp.slug || rp.id}`}
+                      className="group flex flex-col rounded-2xl overflow-hidden border border-border bg-card hover:border-foreground transition-colors"
+                    >
+                      <div className="relative w-full aspect-[16/10] bg-muted overflow-hidden">
+                        {rp.featured_image ? (
+                          <Image
+                            src={rp.featured_image}
+                            alt={rp.title}
+                            fill
+                            referrerPolicy="no-referrer"
+                            className="object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-muted to-secondary" />
+                        )}
+                      </div>
+                      <div className="p-5 flex flex-col flex-1">
+                        {rp.category && (
+                          <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-primary mb-2">
+                            {rp.category}
+                          </span>
+                        )}
+                        <h3 className="font-display text-lg md:text-xl font-bold text-foreground leading-snug group-hover:text-primary transition-colors line-clamp-3">
+                          {rp.title}
+                        </h3>
+                        {rp.excerpt && (
+                          <p className="font-serif-body italic text-sm text-muted-foreground mt-2 line-clamp-2">
+                            {rp.excerpt}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground mt-4 pt-4 border-t border-border">
+                          <CalendarDays className="w-3 h-3" />
+                          <time dateTime={rp.published_at || ''}>{formatDate(rp.published_at)}</time>
+                          <span className="ml-auto">{readingTime(rp.content)}</span>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </aside>
+            )}
           </article>
         )}
       </div>
