@@ -7,6 +7,9 @@ import type { Post } from '../../lib/types';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowLeft, CalendarDays, Clock, User, ArrowRight } from 'lucide-react';
+import { HScroller, HScrollItem } from '@/components/ui/HScroller';
+import { ArticleCard } from '@/components/ui/ArticleCard';
+import { BlogContent } from '@/components/blog/BlogContent';
 
 function formatDate(d?: string | null) {
   return d ? new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }) : '-';
@@ -183,7 +186,8 @@ export function BlogPostPage({ slug }: { slug: string }) {
             )}
 
             {/* Body — drop cap, serif body */}
-            <section
+            <BlogContent
+              html={post.content}
               className="dropcap font-serif-body text-foreground/90 prose prose-lg max-w-none
                          prose-headings:font-display prose-headings:font-bold prose-headings:text-foreground
                          prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-4
@@ -192,7 +196,6 @@ export function BlogPostPage({ slug }: { slug: string }) {
                          prose-a:text-primary prose-a:no-underline hover:prose-a:underline
                          prose-blockquote:border-l-4 prose-blockquote:border-primary prose-blockquote:font-display prose-blockquote:italic prose-blockquote:text-2xl prose-blockquote:text-foreground
                          prose-img:rounded-none prose-img:mx-auto"
-              dangerouslySetInnerHTML={{ __html: post.content }}
             />
 
             {/* End mark */}
@@ -223,49 +226,13 @@ export function BlogPostPage({ slug }: { slug: string }) {
                   </Link>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <HScroller ariaLabel="Saran postingan lain">
                   {related.map((rp) => (
-                    <Link
-                      key={rp.id}
-                      href={`/blog/${rp.slug || rp.id}`}
-                      className="group flex flex-col rounded-2xl overflow-hidden border border-border bg-card hover:border-foreground transition-colors"
-                    >
-                      <div className="relative w-full aspect-[16/10] bg-muted overflow-hidden">
-                        {rp.featured_image ? (
-                          <Image
-                            src={rp.featured_image}
-                            alt={rp.title}
-                            fill
-                            referrerPolicy="no-referrer"
-                            className="object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-muted to-secondary" />
-                        )}
-                      </div>
-                      <div className="p-5 flex flex-col flex-1">
-                        {rp.category && (
-                          <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-primary mb-2">
-                            {rp.category}
-                          </span>
-                        )}
-                        <h3 className="font-display text-lg md:text-xl font-bold text-foreground leading-snug group-hover:text-primary transition-colors line-clamp-3">
-                          {rp.title}
-                        </h3>
-                        {rp.excerpt && (
-                          <p className="font-serif-body italic text-sm text-muted-foreground mt-2 line-clamp-2">
-                            {rp.excerpt}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground mt-4 pt-4 border-t border-border">
-                          <CalendarDays className="w-3 h-3" />
-                          <time dateTime={rp.published_at || ''}>{formatDate(rp.published_at)}</time>
-                          <span className="ml-auto">{readingTime(rp.content)}</span>
-                        </div>
-                      </div>
-                    </Link>
+                    <HScrollItem key={rp.id}>
+                      <ArticleCard post={rp} />
+                    </HScrollItem>
                   ))}
-                </div>
+                </HScroller>
               </aside>
             )}
           </article>
