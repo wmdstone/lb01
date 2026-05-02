@@ -4,18 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-<<<<<<< HEAD
     "dev": "NODE_OPTIONS='--max-old-space-size=4096' next dev -p 3000",
     "build": "NODE_OPTIONS='--max-old-space-size=4096' next build && node scripts/post-build-dist.mjs",
     "build:dev": "NODE_OPTIONS='--max-old-space-size=4096' next build && node scripts/post-build-dist.mjs",
     "build:debug": "NODE_OPTIONS='--max-old-space-size=4096' node scripts/build-with-telemetry.mjs",
     "start": "NODE_OPTIONS='--max-old-space-size=2048' next start -p 3000",
-=======
-    "dev": "next dev --webpack -p 3000",
-    "build": "next build",
-    "build:dev": "next build",
-    "start": "next start -p 3000",
->>>>>>> 1d807c6e5f2d66a2df5dd6fad3e43f39c5731e6e
     "clean": "rm -rf .next && rm -rf dist",
     "clean:all": "rm -rf .next dist .next-telemetry node_modules/.cache",
     "lint": "next lint"
