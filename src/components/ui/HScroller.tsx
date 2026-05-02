@@ -51,16 +51,18 @@ export function HScroller({
 
   return (
     <div className={cn('relative group/hscroll', className)}>
-      {/* Edge fades */}
+      {/* Edge fades — visible on all breakpoints incl. mobile */}
       <div
+        aria-hidden
         className={cn(
-          'pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-background to-transparent z-10 transition-opacity',
+          'pointer-events-none absolute inset-y-0 left-0 w-8 sm:w-12 bg-gradient-to-r from-background via-background/80 to-transparent z-10 transition-opacity duration-300',
           canLeft ? 'opacity-100' : 'opacity-0'
         )}
       />
       <div
+        aria-hidden
         className={cn(
-          'pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent z-10 transition-opacity',
+          'pointer-events-none absolute inset-y-0 right-0 w-8 sm:w-12 bg-gradient-to-l from-background via-background/80 to-transparent z-10 transition-opacity duration-300',
           canRight ? 'opacity-100' : 'opacity-0'
         )}
       />
@@ -72,7 +74,7 @@ export function HScroller({
             aria-label="Scroll left"
             onClick={() => scrollBy(-1)}
             className={cn(
-              'hidden md:flex absolute left-1 top-1/2 -translate-y-1/2 z-20 w-9 h-9 items-center justify-center rounded-full bg-background border border-border shadow-soft text-foreground hover:bg-foreground hover:text-background transition-all',
+              'flex absolute left-1 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-9 sm:h-9 items-center justify-center rounded-full bg-background/95 backdrop-blur border border-border shadow-soft text-foreground hover:bg-foreground hover:text-background transition-all',
               canLeft ? 'opacity-100' : 'opacity-0 pointer-events-none'
             )}
           >
@@ -83,7 +85,7 @@ export function HScroller({
             aria-label="Scroll right"
             onClick={() => scrollBy(1)}
             className={cn(
-              'hidden md:flex absolute right-1 top-1/2 -translate-y-1/2 z-20 w-9 h-9 items-center justify-center rounded-full bg-background border border-border shadow-soft text-foreground hover:bg-foreground hover:text-background transition-all',
+              'flex absolute right-1 top-1/2 -translate-y-1/2 z-20 w-8 h-8 sm:w-9 sm:h-9 items-center justify-center rounded-full bg-background/95 backdrop-blur border border-border shadow-soft text-foreground hover:bg-foreground hover:text-background transition-all',
               canRight ? 'opacity-100' : 'opacity-0 pointer-events-none'
             )}
           >
@@ -96,7 +98,7 @@ export function HScroller({
         ref={ref}
         role="region"
         aria-label={ariaLabel}
-        className="flex gap-5 overflow-x-auto snap-x snap-mandatory scrollbar-hide scroll-smooth pb-2 -mx-4 px-4 sm:mx-0 sm:px-0"
+        className="flex gap-5 overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide scroll-smooth pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 [-webkit-overflow-scrolling:touch]"
       >
         {children}
       </div>
