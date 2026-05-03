@@ -91,7 +91,7 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
         RELATIONAL.map(async (name) => {
           try {
             const snap = await getDocs(collection(db, name));
-            relational[name] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+            relational[name] = snap.docs.map((d: any) => ({ id: d.id, ...(d.data() as any) }));
           } catch {
             relational[name] = [];
           }
