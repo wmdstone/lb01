@@ -569,7 +569,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
             </div>
             <button
               onClick={handleFullSnapshotJSONExport}
-              disabled={busy === 'full_json'}
+              disabled={busy === 'full_json' || isImporting}
               className="mt-2 inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11 shadow-sm"
             >
               {busy === 'full_json' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
@@ -683,6 +683,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
             <input
               type="file"
               accept=".json,application/json"
+              disabled={isImporting || busy === 'import_json'}
               onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) onFilePickedJSON(f);
@@ -691,6 +692,24 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
               className="block flex-1 text-sm text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-primary file:text-white file:cursor-pointer"
             />
           </div>
+
+          {/* Relational JSON Restore — Progress */}
+          {(isImporting || importStatus) && (
+            <div className="p-4 rounded-xl border border-border bg-card space-y-2">
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                {isImporting ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                <span>JSON Snapshot Restore</span>
+                <span className="ml-auto font-mono text-xs text-muted-foreground">{importProgress}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all"
+                  style={{ width: `${importProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">{importStatus}</p>
+            </div>
+          )}
 
           {/* Type selector */}
           <div>
