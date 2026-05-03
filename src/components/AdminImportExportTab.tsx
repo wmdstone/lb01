@@ -1,8 +1,22 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Download, Upload, FileText, Loader2, CheckCircle2, AlertCircle, Database } from 'lucide-react';
+import { Download, Upload, FileText, Loader2, CheckCircle2, AlertCircle, Database, Settings } from 'lucide-react';
 import { toCSV, downloadCSV, parseCSV } from '../lib/csv';
+import { z } from 'zod';
+import { toast } from 'sonner';
 
 type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+const SnapshotSchema = z.object({
+  metadata: z.object({
+    generated_at: z.string().optional(),
+    version: z.string().optional()
+  }).optional(),
+  students: z.array(z.any()).optional(),
+  masterGoals: z.array(z.any()).optional(),
+  categories: z.array(z.any()).optional(),
+  posts: z.array(z.any()).optional(),
+  logs: z.array(z.any()).optional()
+}).catchall(z.any());
 
 interface Props {
   apiFetch: ApiFetch;
@@ -38,7 +52,43 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
     return m;
   }, [categories]);
 
-  // ============= EXPORT =============
+  const handleFullSnapshotJSONExport = async () => {
+    setBusy('full_json');
+    try {
+      // Fetch all required data
+      const [postsRes, logsRes] = await Promise.all([
+        apiFetch('/api/posts'),
+        apiFetch('/api/logs'),
+      ]);
+      const posts = postsRes.ok ? await postsRes.json() : [];
+      const logs = logsRes.ok ? await logsRes.json() : [];
+
+      const snapshot = {
+        metadata: {
+          generated_at: new Date().toISOString(),
+          version: "1.0",
+        },
+        students: students || [],
+        masterGoals: masterGoals || [],
+        categories: categories || [],
+        posts: posts || [],
+        logs: logs || [],
+      };
+
+      const jsonString = JSON.stringify(snapshot, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `system_snapshot_${today()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert('Export failed: ' + (e?.message || e));
+    } finally {
+      setBusy(null);
+    }
+  };
   const handleExport = async (key: DatasetKey) => {
     setBusy(key);
     try {
@@ -136,6 +186,46 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
     }
   };
 
+  const onFilePickedJSON = async (file: File) => {
+    setBusy('import_json');
+    try {
+      const text = await file.text();
+      const parsedData = JSON.parse(text);
+      
+      const validatedData = SnapshotSchema.parse(parsedData);
+      
+      // Dry Run Check
+      const summary = `Dry Run Summary:
+- Students: ${validatedData.students?.length || 0}
+- Goals: ${validatedData.masterGoals?.length || 0}
+- Categories: ${validatedData.categories?.length || 0}
+- Posts: ${validatedData.posts?.length || 0}
+- Logs: ${validatedData.logs?.length || 0}
+
+Akan merevitalisasi (restore) semua data yang ada dengan data ini. Proses ini akan meniban entri yang duplikat berdasarkan ID. Yakin lanjutkan?`;
+
+      if (confirm(summary)) {
+        const toastId = toast.loading('Sedang melakukan restorasi data...');
+        const res = await apiFetch('/api/snapshot/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validatedData),
+        });
+
+        if (!res.ok) {
+           throw new Error('Gagal merestore data. ' + await res.text());
+        }
+
+        toast.success("Snapshot berhasil direstore. Semua relasi dan timestamps berhasil dipertahankan.", { id: toastId });
+        refreshData();
+      }
+    } catch (e: any) {
+      toast.error('Gagal membaca / merestore JSON: ' + (e?.message || e));
+    } finally {
+      setBusy(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
   // ============= IMPORT =============
   const onFilePicked = async (file: File) => {
     setImportMessage(null);
@@ -321,6 +411,25 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="bg-primary-50 border border-primary-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 lg:col-span-3">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center">
+                <Settings className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-primary-900 truncate">System Full Snapshot (JSON)</h4>
+                <p className="text-xs text-primary-700">Export semua data termasuk murid, goals, post, kategory, dan log dalam satu klik.</p>
+              </div>
+            </div>
+            <button
+              onClick={handleFullSnapshotJSONExport}
+              disabled={busy === 'full_json'}
+              className="mt-2 inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60 min-h-11 shadow-sm"
+            >
+              {busy === 'full_json' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Export Full Snapshot (JSON)
+            </button>
+          </div>
           <ExportCard icon={Database} title="Students" subtitle="Profile + summary stats per student" dataKey="students" count={students?.length} />
           <ExportCard icon={Database} title="Tracks & Goals" subtitle="All master goals with points & category" dataKey="goals" count={masterGoals?.length} />
           <ExportCard icon={Database} title="Categories" subtitle="Goal category list" dataKey="categories" count={categories?.length} />
@@ -384,6 +493,59 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
         </div>
 
         <div className="bg-background border border-border rounded-2xl p-4 sm:p-5 space-y-4">
+          {/* Seed Data Dummies */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center p-4 bg-primary/10 rounded-xl border border-dashed border-primary mb-6">
+            <div className="flex-1">
+              <h5 className="font-bold text-sm text-primary-900">Seeding Data Dummies (Testing)</h5>
+              <p className="text-xs text-primary-700 mt-1">Mengisi database Firestore dengan data sample: 1 Admin, beberapa murid, master goals, kategori dan artikel post. Akun master admin akan digenerate dengan email: admin@master.com, pass: admin</p>
+            </div>
+            <button
+               onClick={async () => {
+                 if(confirm("Yakin ingin melakukan seeding? Data dummies akan ditambahkan ke database Anda.")) {
+                    setBusy('seeding');
+                    const toastId = toast.loading('Sedang melakukan seeding data...');
+                    try {
+                      const res = await apiFetch('/api/seeding', { method: 'POST' });
+                      if(res.ok) {
+                        toast.success("Seeding berhasil dilakukan!", { id: toastId });
+                        refreshData();
+                      } else {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || errData.message || 'Gagal seeding. Periksa konfigurasi Firestore Anda.');
+                      }
+                    } catch(e: any) {
+                      toast.error(e.message || 'Gagal melakukan seeding', { id: toastId, duration: 8000 });
+                    } finally {
+                      setBusy(null);
+                    }
+                 }
+               }}
+               disabled={busy === 'seeding'}
+               className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-700 text-white font-bold text-sm px-5 py-2.5 rounded-xl active:scale-95 transition-all disabled:opacity-60"
+            >
+              {busy === 'seeding' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+              Seed Data Dummies
+            </button>
+          </div>
+
+          {/* Import JSON Full Snapshot */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center p-4 bg-muted/30 rounded-xl border border-dashed border-primary mb-6">
+            <div className="flex-1">
+              <h5 className="font-bold text-sm">Kembalikan Snapshot JSON</h5>
+              <p className="text-xs text-muted-foreground mt-1">Menggabungkan/Restore data dari Full System Snapshot JSON.</p>
+            </div>
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFilePickedJSON(f);
+                e.target.value = '';
+              }}
+              className="block flex-1 text-sm text-muted-foreground file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-primary file:text-white file:cursor-pointer"
+            />
+          </div>
+
           {/* Type selector */}
           <div>
             <label className="block text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
