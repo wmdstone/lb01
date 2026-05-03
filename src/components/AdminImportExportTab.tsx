@@ -3,6 +3,9 @@ import { Download, Upload, FileText, Loader2, CheckCircle2, AlertCircle, Databas
 import { toCSV, downloadCSV, parseCSV } from '../lib/csv';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { writeBatch, doc, collection, getDocs } from 'firebase/firestore';
+import { getActiveConnection } from '../lib/dbConnections';
+import { connectFirestore, parseFirebaseConfig } from '../lib/firestoreDriver';
 
 type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -15,7 +18,10 @@ const SnapshotSchema = z.object({
   masterGoals: z.array(z.any()).optional(),
   categories: z.array(z.any()).optional(),
   posts: z.array(z.any()).optional(),
-  logs: z.array(z.any()).optional()
+  logs: z.array(z.any()).optional(),
+  tracks: z.array(z.any()).optional(),
+  goals: z.array(z.any()).optional(),
+  historical_achievements: z.array(z.any()).optional(),
 }).catchall(z.any());
 
 interface Props {
@@ -40,6 +46,11 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Relational JSON snapshot import progress state
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0); // 0..100
+  const [importStatus, setImportStatus] = useState<string>('');
+
   const goalById = useMemo(() => {
     const m = new Map<string, any>();
     (masterGoals || []).forEach((g) => m.set(String(g.id), g));
@@ -55,7 +66,7 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
   const handleFullSnapshotJSONExport = async () => {
     setBusy('full_json');
     try {
-      // Fetch all required data
+      // Fetch via API where possible
       const [postsRes, logsRes] = await Promise.all([
         apiFetch('/api/posts'),
         apiFetch('/api/logs'),
@@ -63,16 +74,51 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
       const posts = postsRes.ok ? await postsRes.json() : [];
       const logs = logsRes.ok ? await logsRes.json() : [];
 
+      // Pull relational/historical collections directly from Firestore so we
+      // can keep the original document IDs (foreign-keys) intact.
+      const conn = getActiveConnection();
+      const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+      const db = connectFirestore(conn.id, cfg);
+
+      const RELATIONAL = [
+        'tracks',
+        'historical_achievements',
+        'achievements',
+        'student_goals',
+      ];
+      const relational: Record<string, any[]> = {};
+      await Promise.all(
+        RELATIONAL.map(async (name) => {
+          try {
+            const snap = await getDocs(collection(db, name));
+            relational[name] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+          } catch {
+            relational[name] = [];
+          }
+        }),
+      );
+
+      // Make sure every flat collection also carries its `id` explicitly.
+      const withId = (rows: any[]) => (rows || []).map((r) => ({ ...r, id: r.id }));
+
       const snapshot = {
         metadata: {
           generated_at: new Date().toISOString(),
-          version: "1.0",
+          version: '2.0-relational',
+          source_connection: conn.id,
         },
-        students: students || [],
-        masterGoals: masterGoals || [],
-        categories: categories || [],
-        posts: posts || [],
-        logs: logs || [],
+        students: withId(students),
+        masterGoals: withId(masterGoals),
+        goals: withId(masterGoals), // alias for downstream consumers
+        categories: withId(categories),
+        posts: withId(posts),
+        logs: withId(logs),
+        tracks: relational.tracks || [],
+        historical_achievements: [
+          ...(relational.historical_achievements || []),
+          ...(relational.achievements || []),
+          ...(relational.student_goals || []),
+        ],
       };
 
       const jsonString = JSON.stringify(snapshot, null, 2);
@@ -186,43 +232,143 @@ export function AdminImportExportTab({ apiFetch, students, masterGoals, categori
     }
   };
 
+  /**
+   * Relational JSON restore — preserves original Firestore document IDs and
+   * uses chunked writeBatch (≤450 ops) to stay below the 500-op Firestore
+   * limit. Failed chunks are retried with exponential backoff before bubbling
+   * up the error to the user.
+   */
+  const importFullSnapshot = async (validatedData: z.infer<typeof SnapshotSchema>) => {
+    const conn = getActiveConnection();
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    const db = connectFirestore(conn.id, cfg);
+
+    // Map JSON section → Firestore collection name. The keys mirror what the
+    // export writes; values are the destination collections.
+    const SECTION_TO_COLLECTION: Record<string, string> = {
+      categories: 'categories',
+      masterGoals: 'master_goals',
+      goals: 'master_goals',
+      students: 'students',
+      posts: 'posts',
+      logs: 'activity_logs',
+      tracks: 'tracks',
+      historical_achievements: 'historical_achievements',
+    };
+    // Insert in dependency order so foreign-key references resolve cleanly.
+    const ORDER = [
+      'categories',
+      'masterGoals',
+      'goals',
+      'students',
+      'posts',
+      'logs',
+      'tracks',
+      'historical_achievements',
+    ];
+
+    type Op = { collection: string; section: string; id: string; data: any };
+    const ops: Op[] = [];
+    for (const section of ORDER) {
+      const rows = ((validatedData as any)[section] || []) as any[];
+      const collName = SECTION_TO_COLLECTION[section];
+      if (!rows.length || !collName) continue;
+      for (const raw of rows) {
+        if (!raw) continue;
+        const { id, ...rest } = raw;
+        // Preserve the original document id whenever present so relational
+        // links (studentId, goalId, trackId, …) survive the round-trip.
+        const docId = id != null && String(id).length > 0
+          ? String(id)
+          : doc(collection(db, collName)).id;
+        ops.push({ collection: collName, section, id: docId, data: rest });
+      }
+    }
+
+    const CHUNK = 450;
+    const totalChunks = Math.max(1, Math.ceil(ops.length / CHUNK));
+    setIsImporting(true);
+    setImportProgress(0);
+    setImportStatus(`Mempersiapkan ${ops.length} dokumen dalam ${totalChunks} batch…`);
+
+    const commitWithRetry = async (slice: Op[], chunkIdx: number) => {
+      const sectionsInChunk = Array.from(new Set(slice.map((o) => o.section))).join(', ');
+      let attempt = 0;
+      let lastErr: any = null;
+      while (attempt < 3) {
+        try {
+          setImportStatus(
+            `Restoring chunk ${chunkIdx + 1} of ${totalChunks} (${sectionsInChunk})${attempt ? ` — retry ${attempt}` : ''}…`,
+          );
+          const batch = writeBatch(db);
+          for (const op of slice) {
+            batch.set(doc(db, op.collection, op.id), op.data, { merge: true });
+          }
+          await batch.commit();
+          return;
+        } catch (e) {
+          lastErr = e;
+          attempt++;
+          await new Promise((r) => setTimeout(r, 400 * Math.pow(2, attempt)));
+        }
+      }
+      throw lastErr;
+    };
+
+    for (let i = 0; i < totalChunks; i++) {
+      const slice = ops.slice(i * CHUNK, (i + 1) * CHUNK);
+      await commitWithRetry(slice, i);
+      setImportProgress(Math.round(((i + 1) / totalChunks) * 100));
+    }
+
+    setImportStatus(`Selesai. ${ops.length} dokumen berhasil di-restore.`);
+  };
+
   const onFilePickedJSON = async (file: File) => {
     setBusy('import_json');
+    setIsImporting(false);
+    setImportProgress(0);
+    setImportStatus('');
     try {
       const text = await file.text();
       const parsedData = JSON.parse(text);
-      
       const validatedData = SnapshotSchema.parse(parsedData);
-      
-      // Dry Run Check
-      const summary = `Dry Run Summary:
-- Students: ${validatedData.students?.length || 0}
-- Goals: ${validatedData.masterGoals?.length || 0}
-- Categories: ${validatedData.categories?.length || 0}
-- Posts: ${validatedData.posts?.length || 0}
-- Logs: ${validatedData.logs?.length || 0}
 
-Akan merevitalisasi (restore) semua data yang ada dengan data ini. Proses ini akan meniban entri yang duplikat berdasarkan ID. Yakin lanjutkan?`;
+      const counts = {
+        students: validatedData.students?.length || 0,
+        masterGoals: (validatedData.masterGoals?.length || validatedData.goals?.length) || 0,
+        categories: validatedData.categories?.length || 0,
+        posts: validatedData.posts?.length || 0,
+        logs: validatedData.logs?.length || 0,
+        tracks: (validatedData as any).tracks?.length || 0,
+        historical_achievements: (validatedData as any).historical_achievements?.length || 0,
+      };
+      const summary = `Dry Run Summary (relational restore):
+- Students: ${counts.students}
+- Goals: ${counts.masterGoals}
+- Categories: ${counts.categories}
+- Posts: ${counts.posts}
+- Logs: ${counts.logs}
+- Tracks: ${counts.tracks}
+- Historical achievements: ${counts.historical_achievements}
 
-      if (confirm(summary)) {
-        const toastId = toast.loading('Sedang melakukan restorasi data...');
-        const res = await apiFetch('/api/snapshot/restore', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(validatedData),
-        });
+Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 450 op. Lanjutkan?`;
+      if (!confirm(summary)) return;
 
-        if (!res.ok) {
-           throw new Error('Gagal merestore data. ' + await res.text());
-        }
-
-        toast.success("Snapshot berhasil direstore. Semua relasi dan timestamps berhasil dipertahankan.", { id: toastId });
+      const toastId = toast.loading('Memulai restorasi relasional…');
+      try {
+        await importFullSnapshot(validatedData);
+        toast.success('Snapshot berhasil direstore. Relasi & timestamps dipertahankan.', { id: toastId });
         refreshData();
+      } catch (err: any) {
+        toast.error('Restorasi gagal: ' + (err?.message || err), { id: toastId, duration: 8000 });
+        throw err;
       }
     } catch (e: any) {
-      toast.error('Gagal membaca / merestore JSON: ' + (e?.message || e));
+      if (!isImporting) toast.error('Gagal membaca JSON: ' + (e?.message || e));
     } finally {
       setBusy(null);
+      setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
