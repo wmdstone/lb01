@@ -5,6 +5,7 @@ import { apiFetch } from '../../lib/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { DataTable } from '../ui/DataTable';
 import { ColumnDef } from '@tanstack/react-table';
@@ -20,6 +21,7 @@ export function AdminBlogTab() {
   const { isSuperAdmin } = useAuthRole();
   const [isEditing, setIsEditing] = useState<Partial<Post> | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkDeleteIds, setBulkDeleteIds] = useState<string[] | null>(null);
 
   const { data: posts = [], isLoading } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -74,7 +76,40 @@ export function AdminBlogTab() {
     }
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map(id =>
+        apiFetch(`/api/posts/${id}`, { method: 'DELETE' }).catch(() => null)
+      ));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      setBulkDeleteIds(null);
+    }
+  });
+
   const columns = useMemo<ColumnDef<Post>[]>(() => [
+    {
+      id: 'select',
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+          onCheckedChange={(v) => table.toggleAllPageRowsSelected(!!v)}
+          aria-label="Pilih semua"
+          className="h-4 w-4"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(v) => row.toggleSelected(!!v)}
+          aria-label="Pilih baris"
+          className="h-4 w-4"
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: 'title',
       header: 'Judul',
@@ -152,14 +187,17 @@ export function AdminBlogTab() {
 
   if (isEditing) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">{isEditing.id ? 'Ubah Artikel' : 'Tulis Artikel Baru'}</h2>
+      <div className="space-y-8 p-2 md:p-4">
+        <div className="flex items-center justify-between bg-card text-card-foreground p-6 md:p-8 rounded-2xl border border-border shadow-soft">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight">{isEditing.id ? 'Ubah Artikel' : 'Tulis Artikel Baru'}</h2>
+            <p className="text-sm text-muted-foreground mt-1.5">Isi detail artikel di kiri, atur metadata di kanan.</p>
+          </div>
           <Button variant="ghost" onClick={() => setIsEditing(null)}><X className="w-4 h-4 mr-2" /> Batal</Button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-6 bg-card text-card-foreground p-6 rounded-2xl border border-border shadow-soft">
-            <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="lg:col-span-2 space-y-8 bg-card text-card-foreground p-6 md:p-8 rounded-2xl border border-border shadow-soft">
+            <div className="space-y-3">
               <label className="text-sm font-semibold">Judul Artikel</label>
               <Input
                 value={isEditing.title || ''}
@@ -172,7 +210,7 @@ export function AdminBlogTab() {
                 className="text-lg font-medium py-6"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-sm font-semibold">Konten</label>
               <TiptapEditor 
                 content={isEditing.content || ''} 
@@ -181,7 +219,7 @@ export function AdminBlogTab() {
             </div>
           </div>
           
-          <div className="space-y-6 bg-card text-card-foreground p-6 rounded-2xl border border-border shadow-soft h-fit">
+          <div className="space-y-6 bg-card text-card-foreground p-6 md:p-8 rounded-2xl border border-border shadow-soft h-fit lg:sticky lg:top-24">
             <div className="space-y-2">
               <label className="text-sm font-semibold">Status</label>
               <select 
@@ -365,23 +403,24 @@ export function AdminBlogTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card text-card-foreground p-6 rounded-2xl border border-border shadow-soft">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">PPMH Insight <Badge className="bg-primary/20 text-primary hover:bg-primary/30">CMS</Badge></h2>
-          <p className="text-muted-foreground mt-1 text-sm">Kelola artikel dan konten publikasi pesantren.</p>
+    <div className="space-y-8 p-2 md:p-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 bg-card text-card-foreground p-6 md:p-8 rounded-2xl border border-border shadow-soft">
+        <div className="space-y-2">
+          <h2 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-3">PPMH Insight <Badge className="bg-primary/20 text-primary hover:bg-primary/30">CMS</Badge></h2>
+          <p className="text-muted-foreground text-sm">Kelola artikel dan konten publikasi pesantren.</p>
         </div>
-        <Button onClick={() => setIsEditing({ status: 'draft' })} className="rounded-xl shadow-primary-glow font-bold gap-2 w-full sm:w-auto">
+        <Button onClick={() => setIsEditing({ status: 'draft' })} className="rounded-xl shadow-primary-glow font-bold gap-2 w-full sm:w-auto px-6 py-6">
           <Plus className="w-5 h-5" /> Tulis Artikel
         </Button>
       </div>
 
-      <div className="bg-card text-card-foreground rounded-2xl p-6 border border-border shadow-soft">
+      <div className="bg-card text-card-foreground rounded-2xl p-6 md:p-8 border border-border shadow-soft">
         <DataTable
           columns={columns}
           data={posts}
           filterColumn="title"
           filterPlaceholder="Cari judul artikel..."
+          onDeleteSelected={isSuperAdmin ? (ids) => setBulkDeleteIds(ids) : undefined}
         />
       </div>
 
@@ -391,6 +430,14 @@ export function AdminBlogTab() {
         message="Apakah Anda yakin ingin menghapus artikel ini? Tindakan ini tidak dapat diurungkan."
         onConfirm={() => deleteConfirmId && deleteMutation.mutate(deleteConfirmId)}
         onCancel={() => setDeleteConfirmId(null)}
+      />
+
+      <ConfirmModal
+        isOpen={!!bulkDeleteIds}
+        title="Konfirmasi Hapus Massal"
+        message={`Hapus ${bulkDeleteIds?.length ?? 0} artikel? Tindakan ini tidak dapat diurungkan.`}
+        onConfirm={() => bulkDeleteIds && bulkDeleteMutation.mutate(bulkDeleteIds)}
+        onCancel={() => setBulkDeleteIds(null)}
       />
     </div>
   );
