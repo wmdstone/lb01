@@ -28,6 +28,9 @@ export interface AssignedGoal {
   goalId: string;
   completed: boolean;
   completedAt?: string;
+  completionNote?: string | null;
+  markedByAdminId?: string | null;
+  markedByAdminName?: string | null;
 }
 
 /**
