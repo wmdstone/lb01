@@ -151,13 +151,26 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col pb-20 md:pb-0">
-      {/* Navbar Global */}
+      {/* Navbar Global – Leaderboard | Logo (center) | Berita */}
       <nav className="bg-background/80 backdrop-blur-md border-b border-border sticky top-0 z-40 shadow-soft hidden md:block">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <div className="flex items-center gap-2 cursor-pointer group" onClick={() => router.push("/")}>
+          <div className="relative flex justify-between items-center h-20">
+            {/* Left: Leaderboard */}
+            <button
+              onClick={() => router.push("/leaderboard")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${pathname === "/leaderboard" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              Leaderboard
+            </button>
+
+            {/* Center: Logo (absolute center) */}
+            <div
+              className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2 cursor-pointer group"
+              onClick={() => router.push("/")}
+            >
               {appSettings.logoUrl ? (
-                <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="h-10 w-10 object-contain rounded-xl" wrapperClassName="h-10 w-10" />
+                <ImageFallback src={appSettings.logoUrl} alt="Logo" variant="logo" className="h-12 w-12 object-contain rounded-xl" wrapperClassName="h-12 w-12" />
               ) : (
                 <div className="bg-primary p-2 rounded-xl group-hover:rotate-6 transition-transform">
                   <Trophy className="h-6 w-6 text-primary-foreground" />
@@ -166,18 +179,14 @@ function AppContent({ children }: { children: React.ReactNode }) {
               <span className="font-bold text-xl tracking-tight text-foreground">{appSettings.appName || "PPMH"}</span>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <button onClick={() => router.push("/")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${pathname === "/" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
-                Beranda
-              </button>
-              <button onClick={() => router.push("/blog")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${(pathname || "").startsWith("/blog") || (pathname || "").startsWith("/berita") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
-                Berita
-              </button>
-              <button onClick={() => router.push("/leaderboard")} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${pathname === "/leaderboard" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}>
-                Leaderboard
-              </button>
-
-            </div>
+            {/* Right: Berita */}
+            <button
+              onClick={() => router.push("/blog")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${(pathname || "").startsWith("/blog") || (pathname || "").startsWith("/berita") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary"}`}
+            >
+              <Newspaper className="w-5 h-5" />
+              Berita
+            </button>
           </div>
         </div>
       </nav>
