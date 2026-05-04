@@ -333,7 +333,7 @@ export function AdminBlogTab() {
               <label className="text-xs font-semibold text-muted-foreground">Gambar Utama (Featured Image)</label>
               {isEditing.featured_image && (
                 <div className="relative w-full h-32 rounded-lg overflow-hidden group border border-border bg-muted">
-                  <Image src={isEditing.featured_image} alt="Featured" fill referrerPolicy="no-referrer" className="object-cover" />
+                  <Image src={isEditing.featured_image} alt="Featured" fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" referrerPolicy="no-referrer" className="object-cover" />
                   <button 
                     onClick={() => setIsEditing({ ...isEditing, featured_image: '' })}
                     className="absolute top-2 right-2 bg-foreground/60 p-1.5 rounded-full text-background opacity-0 group-hover:opacity-100 transition-opacity"
