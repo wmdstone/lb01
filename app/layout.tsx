@@ -5,6 +5,8 @@ import { ClientLayout } from "@/components/layout/ClientLayout";
 import { ReactQueryClientProvider } from "@/components/providers/ReactQueryClientProvider";
 import { Toaster } from "sonner";
 import { Tracker } from "@/components/Tracker";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 
 export const metadata: Metadata = {
   title: "Leaderboard Santri",
@@ -37,6 +39,8 @@ export default function RootLayout({
           <ClientLayout>
             {children}
             <Tracker />
+            <OfflineIndicator />
+            <ServiceWorkerRegistrar />
             <Toaster richColors position="top-right" />
           </ClientLayout>
         </ReactQueryClientProvider>
