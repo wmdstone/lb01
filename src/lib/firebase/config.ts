@@ -42,6 +42,7 @@ function createDb() {
     return initializeFirestore(
       app,
       {
+        experimentalForceLongPolling: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),

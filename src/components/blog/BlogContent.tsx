@@ -481,6 +481,7 @@ function parseContent(html: string): Chunk[] {
 
 export function BlogContent({ html, className }: { html: string; className?: string }) {
   const [chunks, setChunks] = React.useState<Chunk[]>(() => [{ type: 'html', html: html || '' }]);
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     try {
@@ -492,6 +493,109 @@ export function BlogContent({ html, className }: { html: string; className?: str
       setChunks([{ type: 'html', html: html || '' }]);
     }
   }, [html]);
+
+  // Obsidian-style collapsible headings
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    const headings = containerRef.current.querySelectorAll('h1, h2, h3, h4');
+    
+    headings.forEach((heading, index) => {
+      if (heading.hasAttribute('data-collapsible')) return;
+      heading.setAttribute('data-collapsible', 'true');
+      const headingId = `heading-${index}`;
+      heading.id = heading.id || headingId;
+      
+      // Style heading for interaction. We use negative margin left and padding left so it spans into the left margin to capture clicks, but text remains aligned.
+      heading.classList.add('cursor-pointer', 'group', 'relative');
+      // For mobile: don't pull too much if there's no space, but it's safe if overflow is visible.
+      // We'll just position the icon absolute so it doesn't break normal text flow.
+      
+      // We need to preserve the internal HTML
+      const originalHtml = heading.innerHTML;
+      heading.innerHTML = '';
+      
+      const iconContainer = document.createElement('span');
+      // On mobile: inline block, visible, small margins. On md: absolute, negative left, opacity 0 until hover.
+      iconContainer.className = 'inline-flex md:absolute static md:-left-8 top-1/2 md:-translate-y-1/2 w-5 h-5 md:w-6 md:h-6 items-center justify-center mr-1.5 md:mr-0 text-muted-foreground/50 md:opacity-0 group-hover:opacity-100 transition-all duration-200 hover:text-primary shrink-0';
+      // Down chevron
+      iconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition: transform 0.2s;"><path d="m6 9 6 6 6-6"/></svg>`;
+      
+      const textSpan = document.createElement('span');
+      textSpan.className = 'flex-1 inline-block';
+      textSpan.innerHTML = originalHtml;
+      
+      heading.classList.add('flex', 'items-start', 'md:items-center');
+      heading.appendChild(iconContainer);
+      heading.appendChild(textSpan);
+
+      // Track controlled elements
+      const getControlledElements = () => {
+        const level = parseInt(heading.tagName.replace('H', ''));
+        const els: Element[] = [];
+        let el = heading.nextElementSibling;
+        
+        while (el) {
+          const tagName = el.tagName;
+          if (/^H[1-6]$/.test(tagName)) {
+            const nextLevel = parseInt(tagName.replace('H', ''));
+            // Stop if we hit a heading of the same or higher level
+            if (nextLevel <= level) break;
+          }
+          els.push(el);
+          el = el.nextElementSibling;
+        }
+        return els;
+      };
+
+      const updateVisibility = () => {
+        const elements = getControlledElements();
+        elements.forEach(el => {
+          // If the element has any hidden-by attributes, it should be hidden
+          const hiddenBy = el.getAttribute('data-hidden-by') || '';
+          const hiddenSet = new Set(hiddenBy.split(' ').filter(Boolean));
+          if (hiddenSet.size > 0) {
+            el.classList.add('hidden');
+          } else {
+            el.classList.remove('hidden');
+          }
+        });
+      }
+
+      heading.addEventListener('click', (e) => {
+        if (window.getSelection()?.toString().length) return;
+        
+        const isCollapsed = heading.hasAttribute('data-collapsed');
+        const iconSvg = iconContainer.querySelector('svg');
+        const elements = getControlledElements();
+        
+        if (isCollapsed) {
+          heading.removeAttribute('data-collapsed');
+          if (iconSvg) iconSvg.style.transform = 'rotate(0deg)';
+          // Remove this heading's ID from the hidden-by list of its children
+          elements.forEach(el => {
+            const hiddenBy = el.getAttribute('data-hidden-by') || '';
+            const hiddenSet = new Set(hiddenBy.split(' ').filter(Boolean));
+            hiddenSet.delete(heading.id);
+            el.setAttribute('data-hidden-by', Array.from(hiddenSet).join(' '));
+          });
+          heading.classList.remove('opacity-60');
+          updateVisibility();
+        } else {
+          heading.setAttribute('data-collapsed', 'true');
+          if (iconSvg) iconSvg.style.transform = 'rotate(-90deg)';
+          // Add this heading's ID to the hidden-by list of its children
+          elements.forEach(el => {
+            const hiddenBy = el.getAttribute('data-hidden-by') || '';
+            const hiddenSet = new Set(hiddenBy.split(' ').filter(Boolean));
+            hiddenSet.add(heading.id);
+            el.setAttribute('data-hidden-by', Array.from(hiddenSet).join(' '));
+          });
+          heading.classList.add('opacity-60');
+          updateVisibility();
+        }
+      });
+    });
+  }, [chunks]);
 
   const safeChunks = asArray<Chunk>(chunks);
 
@@ -530,7 +634,7 @@ export function BlogContent({ html, className }: { html: string; className?: str
   };
 
   return (
-    <div className={className}>
+    <div className={className} ref={containerRef}>
       {safeChunks.map((c, i) => (
         <BlockErrorBoundary key={i} label={c.type}>
           {renderChunk(c, i)}

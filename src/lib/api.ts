@@ -82,7 +82,9 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
     }
     if (res.status === 401) {
       removeLocalToken();
-      window.dispatchEvent(new Event('auth-expired'));
+      if (token) {
+        window.dispatchEvent(new Event('auth-expired'));
+      }
     }
     console.log(`[apiFetch] Finished ${url} with status ${res.status}`);
     return res;

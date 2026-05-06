@@ -125,7 +125,7 @@ export function AdminStatisticsTab() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
+    <div className="p-4 sm:p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
           <h3 className="text-2xl font-black text-foreground">
@@ -256,19 +256,15 @@ export function AdminStatisticsTab() {
         </div>
       </div>
 
-      <Card className="rounded-xl shadow-soft border-border overflow-hidden">
-        <CardHeader className="p-6 border-b border-border bg-secondary/30">
-          <h4 className="font-bold text-foreground">Log Aktivitas Penuh</h4>
-        </CardHeader>
-        <CardContent className="p-0">
-          <DataTable
-            columns={logColumns}
-            data={data?.logs || []}
-            filterColumn="details"
-            filterPlaceholder="Cari log..."
-          />
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-2">
+        <h4 className="font-bold text-foreground text-lg px-2">Log Aktivitas Penuh</h4>
+        <DataTable
+          columns={logColumns}
+          data={data?.logs || []}
+          filterColumn="details"
+          filterPlaceholder="Cari log..."
+        />
+      </div>
     </div>
   );
 }

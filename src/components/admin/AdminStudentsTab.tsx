@@ -81,13 +81,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { useAuthRole } from "@/hooks/useAuthRole";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
@@ -311,18 +305,13 @@ function GoalAuditCard({
                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
                         Ditandai Oleh
                       </Label>
-                      <Select value={markerId} onValueChange={setMarkerId}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue placeholder="Pilih admin" />
-                        </SelectTrigger>
-                        <SelectContent className="z-[80]">
-                          {adminOptions.map((a) => (
-                            <SelectItem key={a.id} value={a.id}>
-                              {a.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <PopoverSelect
+                        value={markerId}
+                        onValueChange={setMarkerId}
+                        options={adminOptions.map((a) => ({ value: a.id, label: a.name }))}
+                        placeholder="Pilih admin"
+                        className="h-10"
+                      />
                     </div>
                   </div>
 
@@ -616,23 +605,11 @@ export function AdminStudentsTab({
         </div>
       </div>
 
-      <div className="mb-6">
-        <StudentSearchAdvanced
-          value={searchFilter}
-          onChange={setSearchFilter}
-          sortKey={sortKey}
-          onSortChange={setSortKey}
-          availableTags={availableTags}
-          studentTagSource={studentTagSource}
-          placeholder="Cari Santri..."
-        />
-      </div>
-
       <DataTable
         columns={columns}
         data={filtered}
         filterColumn="name"
-        filterPlaceholder="Filter Santri..."
+        filterPlaceholder="Cari / Filter Santri..."
         onDeleteSelected={(ids) => setBulkDeleteIds(ids)}
       />
 
@@ -1065,18 +1042,18 @@ function StudentAdminModal({
                   Atur tugas untuk Santri ini
                 </p>
               </div>
-              <select
-                className="bg-secondary border-none rounded-xl p-2 text-xs font-bold text-foreground focus:ring-2 focus:ring-primary/50"
+              <PopoverSelect
+                className="bg-secondary min-w-[200px] border-none rounded-xl h-9 text-xs font-bold text-foreground focus:ring-2 focus:ring-primary/50"
                 value={filterCat}
-                onChange={(e) => setFilterCat(e.target.value)}
-              >
-                <option value="ALL">Semua Kategori</option>
-                {categories.map((c: any, index: number) => (
-                  <option key={c.id || `cp1-${index}`} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onValueChange={setFilterCat}
+                options={[
+                  { value: "ALL", label: "Semua Kategori" },
+                  ...categories.map((c: any) => ({
+                    value: c.name,
+                    label: c.name
+                  }))
+                ]}
+              />
             </div>
 
             {/* Bulk actions for the current track scope */}

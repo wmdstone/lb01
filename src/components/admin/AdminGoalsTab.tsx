@@ -14,13 +14,7 @@ import { ConfirmModal } from "../ui/ConfirmModal";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { SimpleMenu } from "../ui/SimpleMenu";
 import type { Category, MasterGoal } from "../../lib/types";
 
@@ -425,27 +419,15 @@ function GoalAdminModal({ goal, categories, onClose, onSave }: any) {
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">
                 Category
               </label>
-              <Select
+              <PopoverSelect
                 value={formData.categoryName}
                 onValueChange={(v) =>
                   setFormData((p) => ({ ...p, categoryName: v }))
                 }
-              >
-                <SelectTrigger className="bg-secondary/30 h-12 border-border font-bold text-sm rounded-xl w-full">
-                  <SelectValue placeholder="Pilih Kategori" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl shadow-soft border-border">
-                  {categories.map((c: any) => (
-                    <SelectItem
-                      key={c.id}
-                      value={c.name}
-                      className="font-medium"
-                    >
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={categories.map((c: any) => ({ value: c.name, label: c.name }))}
+                placeholder="Pilih Kategori"
+                className="bg-secondary/30 h-12 border-border font-bold text-sm rounded-xl w-full"
+              />
             </div>
             <div className="w-24">
               <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">

@@ -31,7 +31,9 @@ import {
 import { HScroller, HScrollItem } from "@/components/ui/HScroller";
 import { CategoryChips } from "@/components/ui/CategoryChips";
 import { ArticleCard } from "@/components/ui/ArticleCard";
+import { PopoverSelect } from "@/components/ui/PopoverSelect";
 import { SmartSearchBar, type SortKey } from "@/components/ui/SmartSearchBar";
+import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 
 function todayLabel() {
   return new Date().toLocaleDateString("id-ID", {
@@ -57,6 +59,15 @@ export function LandingPage() {
     queryKey: ["public-students"],
     queryFn: async () => {
       const res = await apiFetch("/api/students");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: masterGoals = [] } = useQuery<any[]>({
+    queryKey: ["public-master-goals"],
+    queryFn: async () => {
+      const res = await apiFetch("/api/masterGoals");
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -110,9 +121,56 @@ export function LandingPage() {
 
   const featuredPosts = filteredPosts.slice(0, 8);
 
-  const topStudents = [...students]
-    .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
-    .slice(0, 8);
+  const sortedStudents = React.useMemo(() => {
+    return [...students]
+      .map((student) => {
+        if (!student.assignedGoals || !Array.isArray(student.assignedGoals)) {
+          return {
+            ...student,
+            calculatedPoints: student.totalPoints || 0,
+            lastCompletion: 0,
+          };
+        }
+
+        const completedGoals = student.assignedGoals.filter((g) => g.completed);
+
+        const calculatedPoints = completedGoals.reduce((total, assigned) => {
+          const goalData = masterGoals.find(
+            (mg) => String(mg.id) === String(assigned.goalId),
+          );
+          if (goalData) {
+            const pts =
+              goalData.points !== undefined
+                ? goalData.points
+                : goalData.pointValue || goalData.pts || 0;
+            const numPts =
+              typeof pts === "number" ? pts : parseInt(String(pts), 10);
+            return total + (isNaN(numPts) ? 0 : numPts);
+          }
+          return total;
+        }, 0);
+
+        const lastCompletion = completedGoals.reduce((max, g) => {
+          if (!g.completedAt) return max;
+          const compTime = new Date(g.completedAt).getTime();
+          return isNaN(compTime) ? max : compTime > max ? compTime : max;
+        }, 0);
+
+        return {
+          ...student,
+          totalPoints: calculatedPoints,
+          lastCompletion,
+        };
+      })
+      .sort((a, b) => {
+        const ptsA = a.totalPoints || 0;
+        const ptsB = b.totalPoints || 0;
+        if (ptsB !== ptsA) return ptsB - ptsA;
+        return (b.lastCompletion || 0) - (a.lastCompletion || 0);
+      });
+  }, [students, masterGoals]);
+
+  const topStudents = sortedStudents.slice(0, 8);
 
   // Stats Hook
   const [statsRange, setStatsRange] = React.useState("all");
@@ -133,10 +191,13 @@ export function LandingPage() {
       (((p as any).offset_views as number) || 0),
     0,
   );
-  const totalPoints = students.reduce((s, st) => s + (st.totalPoints || 0), 0);
+  const totalPoints = sortedStudents.reduce(
+    (s, st) => s + (st.totalPoints || 0),
+    0,
+  );
   const stats = [
     {
-      label: "Web Visitors",
+      label: "Pengunjung Web",
       value: analytics?.uniqueVisitors || 0,
       icon: Users,
       hint: "Pengunjung Unik",
@@ -224,67 +285,6 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Smart Search + Category Chips (sticky-ish discovery bar) */}
-      <section className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 md:px-8 py-4 space-y-3">
-          <SmartSearchBar
-            value={search}
-            onChange={setSearch}
-            sort={sort}
-            onSortChange={setSort}
-            placeholder="Telusuri berita, kategori, atau topik…"
-          />
-          {categoryCounts.length > 0 && (
-            <CategoryChips
-              categories={categoryCounts}
-              activeName={activeCat}
-              onSelect={setActiveCat}
-            />
-          )}
-        </div>
-      </section>
-
-      {/* Berita Unggulan — horizontal rail */}
-      <section className="max-w-6xl mx-auto px-6 md:px-8 pt-10">
-        <div className="flex items-end justify-between gap-4 mb-6">
-          <div>
-            <h2 className="font-display text-2xl md:text-3xl font-black text-foreground tracking-tight">
-              <Star className="w-6 h-6 text-primary inline mr-2" />
-              {activeCat ? activeCat : "Berita Unggulan"}
-              {search && (
-                <span className="font-normal italic text-base text-muted-foreground ml-3">
-                  "{search}"
-                </span>
-              )}
-            </h2>
-          </div>
-          <Link
-            href="/blog"
-            className="hidden sm:inline-flex items-center text-foreground font-bold hover:text-primary transition-colors uppercase tracking-widest text-xs border-b border-foreground hover:border-primary pb-1"
-          >
-            Semua Artikel <ArrowRight className="w-3.5 h-3.5 ml-1" />
-          </Link>
-        </div>
-        <div className="editorial-rule mb-6" />
-
-        {featuredPosts.length === 0 ? (
-          <div className="py-16 text-center border border-dashed border-border">
-            <BookOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground font-serif-body italic">
-              Tidak ada artikel yang cocok dengan filter Anda.
-            </p>
-          </div>
-        ) : (
-          <HScroller ariaLabel="Berita unggulan">
-            {featuredPosts.map((post) => (
-              <HScrollItem key={post.id}>
-                <ArticleCard post={post} showViews={sort === "popular"} />
-              </HScrollItem>
-            ))}
-          </HScroller>
-        )}
-      </section>
-
       {/* Peringkat — horizontal rail */}
       <section className="max-w-6xl mx-auto px-4 md:px-8 pt-14">
         <div className="flex items-center justify-between gap-4 mb-6">
@@ -365,17 +365,18 @@ export function LandingPage() {
               Statistik
             </h2>
           </span>
-          <select
+          <PopoverSelect
             value={statsRange}
-            onChange={(e) => setStatsRange(e.target.value)}
-            className="bg-transparent border border-border text-foreground rounded-lg py-1 px-2 text-[10px] focus:outline-none"
-          >
-            <option value="today">Hari Ini</option>
-            <option value="1w">Minggu Ini</option>
-            <option value="1m">Bulan Ini</option>
-            <option value="1y">Tahun Ini</option>
-            <option value="all">All-Time</option>
-          </select>
+            onValueChange={setStatsRange}
+            options={[
+              { value: "today", label: "Hari Ini" },
+              { value: "1w", label: "Minggu Ini" },
+              { value: "1m", label: "Bulan Ini" },
+              { value: "1y", label: "Tahun Ini" },
+              { value: "all", label: "All-Time" },
+            ]}
+            className="w-32 h-8 text-[10px] bg-transparent border-border rounded-lg"
+          />
         </div>
         <div className="flex items-center gap-4 text-xs uppercase tracking-[0.25em] font-bold text-muted-foreground mb-6">
           <span className="flex-1 editorial-rule" />
@@ -475,6 +476,156 @@ export function LandingPage() {
             </div>
           </div>
         </HScroller>
+      </section>
+
+      {/* Berita Section */}
+      <section className="max-w-6xl mx-auto px-2 md:px-8 pt-8 text-left">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <Newspaper className="w-6 h-6 text-primary" />
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-foreground">
+              Berita
+            </h2>
+          </div>
+          <Link
+            href="/blog"
+            className="text-primary text-xs font-bold uppercase tracking-widest hover:underline inline-flex items-center"
+          >
+            Lihat Semua <ArrowRight className="w-3 h-3 ml-1" />
+          </Link>
+        </div>
+        <div className="editorial-rule mb-6" />
+
+        {/* Horizontal Scroll List (Popular/Featured) */}
+        {allPosts.length > 0 && (
+          <div className="mb-4 ml-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-foreground mb-5 uppercase tracking-widest">
+              <Star className="w-4 h-4 text-primary" /> Populer Saat Ini
+            </div>
+            <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide gap-5 pb-4 -mx-4 px-4 md:mx-0 md:px-0">
+              {[...allPosts]
+                .sort(
+                  (a, b) =>
+                    ((b as any).organic_views || 0) +
+                    ((b as any).offset_views || 0) -
+                    (((a as any).organic_views || 0) +
+                      ((a as any).offset_views || 0)),
+                )
+                .slice(0, 5)
+                .map((post) => (
+                  <Link
+                    key={post.id}
+                    href={`/blog/${post.slug || post.id}`}
+                    className="snap-start shrink-0 w-[240px] sm:w-[320px] flex flex-col group"
+                  >
+                    <ImageWithFallback
+                      src={post.featured_image || null}
+                      alt={post.title}
+                      fallbackType="gradient"
+                      fill
+                      sizes="320px"
+                      containerClassName="w-full aspect-[16/10] sm:aspect-video rounded-2xl overflow-hidden mb-4 shadow-sm"
+                      className="transition-transform duration-500 md:group-hover:scale-105"
+                    />
+                    <div className="flex items-center gap-2 mb-2">
+                      {post.category && (
+                        <span className="text-[10px] uppercase tracking-widest font-bold text-primary">
+                          {post.category}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground/30 text-[10px]">
+                        •
+                      </span>
+                      <div className="flex items-center text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                        <span>
+                          {((post as any).organic_views || 0) +
+                            ((post as any).offset_views || 0)}{" "}
+                          views
+                        </span>
+                      </div>
+                    </div>
+                    <h3 className="font-display text-sm md:text-lg font-bold text-foreground leading-snug line-clamp-2 md:line-clamp-3 group-hover:text-primary transition-colors text-pretty">
+                      {post.title}
+                    </h3>
+                    {post.excerpt && (
+                      <p className="mt-2 text-xs text-muted-foreground line-clamp-2 leading-relaxed sm:block">
+                        {post.excerpt}
+                      </p>
+                    )}
+                  </Link>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Vertical List View (Artikel Terbaru) */}
+        {allPosts.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 text-sm font-bold text-foreground uppercase tracking-widest border-b border-border/50 pb-3">
+              <Activity className="w-4 h-4 text-primary" /> Artikel Terbaru
+            </div>
+            <div className="flex flex-col">
+              {[...allPosts]
+                .sort((a, b) =>
+                  (b.published_at || "").localeCompare(a.published_at || ""),
+                )
+                .slice(0, 5)
+                .map((post, i, arr) => (
+                  <Link
+                    key={post.id}
+                    href={`/blog/${post.slug || post.id}`}
+                    className={`flex items-center sm:items-start gap-4 sm:gap-6 group py-4 sm:py-8 ${
+                      i !== arr.length - 1 ? "border-b border-border/40" : ""
+                    }`}
+                  >
+                    <ImageWithFallback
+                      src={post.featured_image || null}
+                      alt={post.title}
+                      fallbackType="gradient"
+                      fill
+                      sizes="160px"
+                      containerClassName="w-24 h-24 md:w-40 md:h-32 shrink-0 rounded-xl overflow-hidden shadow-sm self-center sm:self-start"
+                      className="transition-transform duration-500 md:group-hover:scale-105"
+                    />
+                    <div className="flex-1 min-w-0 flex flex-col justify-center self-stretch py-1">
+                      <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                        {post.category && (
+                          <span className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-primary">
+                            {post.category}
+                          </span>
+                        )}
+                        <span className="text-muted-foreground/30 text-[10px] sm:text-xs">
+                          •
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground font-medium">
+                          <time>
+                            {post.published_at
+                              ? new Date(post.published_at).toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  },
+                                )
+                              : "-"}
+                          </time>
+                        </div>
+                      </div>
+                      <h3 className="font-display text-sm md:text-xl font-bold text-foreground leading-snug line-clamp-2 sm:line-clamp-3 group-hover:text-primary transition-colors text-pretty">
+                        {post.title}
+                      </h3>
+                      {post.excerpt && (
+                        <p className="mt-2 text-xs md:text-sm text-muted-foreground line-clamp-2 leading-relaxed sm:block">
+                          {post.excerpt}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

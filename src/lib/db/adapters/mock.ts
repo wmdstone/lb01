@@ -23,7 +23,7 @@ const FIXTURES: Article[] = [
       "Transformasi digital di pesantren tidak menggantikan nilai tradisi, melainkan memperluas jangkauannya.",
     content: "<p>Konten artikel mock untuk demo UI.</p>",
     coverImage:
-      "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=1200",
+      "https://picsum.photos/seed/ppmhlqm5es/1200/800",
     category: "Pesantren News",
     tags: ["digital", "pendidikan"],
     authorId: "mock-author-1",
@@ -41,7 +41,7 @@ const FIXTURES: Article[] = [
       "Prestasi membanggakan dari santri yang membuktikan ilmu agama dan sains dapat berjalan beriringan.",
     content: "<p>Konten artikel mock untuk demo UI.</p>",
     coverImage:
-      "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=1200",
+      "https://picsum.photos/seed/ppmhoa4z16/1200/800",
     category: "Prestasi",
     tags: ["sains", "lomba"],
     authorId: "mock-author-2",
@@ -59,7 +59,7 @@ const FIXTURES: Article[] = [
       "Literasi digital adalah benteng pertama untuk menjaga akhlak di era media sosial.",
     content: "<p>Konten artikel mock untuk demo UI.</p>",
     coverImage:
-      "https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1200",
+      "https://picsum.photos/seed/ppmh3npeej/1200/800",
     category: "Opini",
     tags: ["literasi"],
     authorId: "mock-author-3",
@@ -77,7 +77,7 @@ const FIXTURES: Article[] = [
       "Pendaftaran terbuka hingga akhir bulan; seleksi mencakup hafalan, akademik, dan wawancara.",
     content: "<p>Konten artikel mock untuk demo UI.</p>",
     coverImage:
-      "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1200",
+      "https://picsum.photos/seed/ppmhe0cy4/1200/800",
     category: "Pesantren News",
     tags: ["beaSantri", "tahfidz"],
     authorId: "mock-author-1",
