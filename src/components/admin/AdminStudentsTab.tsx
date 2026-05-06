@@ -1137,28 +1137,124 @@ function StudentAdminModal({
               </div>
             )}
 
-            <div className="space-y-3 pb-4">
-              {displayedMasterGoals.map((mg: any, index: number) => {
-                const assigned = isAssigned(mg.id);
-                const completed = isCompleted(mg.id);
-                const ag = formData.assignedGoals.find(
-                  (a) => a.goalId === mg.id,
-                );
+            <div className="space-y-4 pb-4">
+              {filteredTree.map((node) => {
+                const groupOpen = expandedGroups[node.group.id] !== false;
+                const groupGoals = node.categories.flatMap((c) => c.goals);
+                const groupAssigned = groupGoals.filter((g) => isAssigned(g.id)).length;
                 return (
-                  <GoalAuditCard
-                    key={`${mg.id}-${index}`}
-                    goal={mg}
-                    assigned={assigned}
-                    completed={completed}
-                    assignedGoal={ag}
-                    admins={admins}
-                    currentAdmin={currentAdmin}
-                    onToggleAssign={() => toggleAssignment(mg.id)}
-                    onApplyCompletion={(payload) =>
-                      applyCompletionToGoal(mg.id, payload)
-                    }
-                    onUnmark={() => unmarkCompletion(mg.id)}
-                  />
+                  <div
+                    key={node.group.id}
+                    className="rounded-xl border border-border bg-secondary/10 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedGroups((p) => ({
+                          ...p,
+                          [node.group.id]: !groupOpen,
+                        }))
+                      }
+                      className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/20"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-black text-sm text-foreground">
+                          {node.group.name}
+                        </span>
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                          {groupAssigned}/{groupGoals.length} ditugaskan ·{" "}
+                          {node.categories.length} kategori
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform ${groupOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {groupOpen && (
+                        <motion.div
+                          layout
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          style={{ overflow: "hidden" }}
+                        >
+                          <div className="p-3 pt-0 space-y-3 border-t border-border/40">
+                            {node.categories.map((catNode) => {
+                              const cid = catNode.category.id;
+                              const catOpen = expandedCats[cid] !== false;
+                              const assignedCount = catNode.goals.filter((g) =>
+                                isAssigned(g.id),
+                              ).length;
+                              return (
+                                <div
+                                  key={cid}
+                                  className="rounded-xl bg-card border border-border overflow-hidden"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedCats((p) => ({ ...p, [cid]: !catOpen }))
+                                    }
+                                    className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/20"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-sm text-foreground">
+                                        {catNode.category.name}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                        {assignedCount}/{catNode.goals.length} ditugaskan
+                                      </span>
+                                    </div>
+                                    <ChevronDown
+                                      className={`w-4 h-4 text-muted-foreground transition-transform ${catOpen ? "rotate-180" : ""}`}
+                                    />
+                                  </button>
+                                  <AnimatePresence initial={false}>
+                                    {catOpen && (
+                                      <motion.div
+                                        layout
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        style={{ overflow: "hidden" }}
+                                      >
+                                        <div className="p-3 space-y-2 border-t border-border/40">
+                                          {catNode.goals.map((mg: any, index: number) => {
+                                            const assigned = isAssigned(mg.id);
+                                            const completed = isCompleted(mg.id);
+                                            const ag = formData.assignedGoals.find(
+                                              (a) => a.goalId === mg.id,
+                                            );
+                                            return (
+                                              <GoalAuditCard
+                                                key={`${mg.id}-${index}`}
+                                                goal={mg}
+                                                assigned={assigned}
+                                                completed={completed}
+                                                assignedGoal={ag}
+                                                admins={admins}
+                                                currentAdmin={currentAdmin}
+                                                onToggleAssign={() => toggleAssignment(mg.id)}
+                                                onApplyCompletion={(payload) =>
+                                                  applyCompletionToGoal(mg.id, payload)
+                                                }
+                                                onUnmark={() => unmarkCompletion(mg.id)}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })}
             </div>
