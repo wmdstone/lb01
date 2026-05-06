@@ -90,7 +90,6 @@ import type { StudentAchievement } from "@/lib/types";
 import {
   buildHierarchy,
   sortByOrder,
-  FALLBACK_GROUP_ID,
 } from "@/lib/hierarchy";
 
 // ---------------------------------------------------------------------------
