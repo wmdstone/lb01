@@ -625,6 +625,7 @@ export function AdminStudentsTab({
           student={editData}
           masterGoals={masterGoals}
           categories={categories}
+          groups={groups}
           onClose={() => setModalOpen(false)}
           onSave={handleSave}
         />
