@@ -54,6 +54,7 @@ import type {
   MasterGoal,
   AssignedGoal,
   Student,
+  Group,
 } from "../../lib/types";
 import { TimeRangeValue } from "../TimeRangeFilter";
 import { StudentSearchFilterValue } from "../StudentSearchFilter";
@@ -86,6 +87,10 @@ import { useAuthRole } from "@/hooks/useAuthRole";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import type { StudentAchievement } from "@/lib/types";
+import {
+  buildHierarchy,
+  sortByOrder,
+} from "@/lib/hierarchy";
 
 // ---------------------------------------------------------------------------
 // Inline collapsible audit card — replaces the legacy CompletionAuditPanel.
@@ -360,6 +365,7 @@ export function AdminStudentsTab({
   refreshData,
   masterGoals,
   categories,
+  groups = [],
   calculateTotalPoints,
 }: any) {
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(
@@ -618,6 +624,7 @@ export function AdminStudentsTab({
           student={editData}
           masterGoals={masterGoals}
           categories={categories}
+          groups={groups}
           onClose={() => setModalOpen(false)}
           onSave={handleSave}
         />
@@ -647,6 +654,7 @@ function StudentAdminModal({
   student,
   masterGoals,
   categories,
+  groups,
   onClose,
   onSave,
 }: any) {
@@ -662,6 +670,8 @@ function StudentAdminModal({
   });
 
   const [filterCat, setFilterCat] = useState("ALL");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
   const [tagInput, setTagInput] = useState("");
 
   const addTag = () => {
@@ -681,14 +691,28 @@ function StudentAdminModal({
     }));
   };
 
-  const displayedMasterGoals =
-    filterCat === "ALL"
-      ? masterGoals
-      : masterGoals.filter(
-          (mg: any) =>
-            (mg.categoryName || "").toLowerCase() ===
-            String(filterCat).toLowerCase(),
-        );
+  // Build the 3-tier tree once, then optionally narrow by selected category.
+  const tree = useMemo(
+    () => buildHierarchy(groups || [], categories, masterGoals),
+    [groups, categories, masterGoals],
+  );
+  const filteredTree = useMemo(() => {
+    if (filterCat === "ALL") return tree;
+    const wanted = String(filterCat).toLowerCase();
+    return tree
+      .map((node) => ({
+        ...node,
+        categories: node.categories.filter(
+          (c) => (c.category.name || "").toLowerCase() === wanted,
+        ),
+      }))
+      .filter((n) => n.categories.length > 0);
+  }, [tree, filterCat]);
+  // Flat list of goals visible after filter — drives bulk-action helpers below.
+  const displayedMasterGoals: MasterGoal[] = useMemo(
+    () => filteredTree.flatMap((n) => n.categories.flatMap((c) => c.goals)),
+    [filteredTree],
+  );
 
   const isAssigned = (goalId: string) =>
     formData.assignedGoals.some((ag) => ag.goalId === goalId);
@@ -1048,7 +1072,7 @@ function StudentAdminModal({
                 onValueChange={setFilterCat}
                 options={[
                   { value: "ALL", label: "Semua Kategori" },
-                  ...categories.map((c: any) => ({
+                  ...sortByOrder(categories).map((c: any) => ({
                     value: c.name,
                     label: c.name
                   }))
@@ -1112,28 +1136,124 @@ function StudentAdminModal({
               </div>
             )}
 
-            <div className="space-y-3 pb-4">
-              {displayedMasterGoals.map((mg: any, index: number) => {
-                const assigned = isAssigned(mg.id);
-                const completed = isCompleted(mg.id);
-                const ag = formData.assignedGoals.find(
-                  (a) => a.goalId === mg.id,
-                );
+            <div className="space-y-4 pb-4">
+              {filteredTree.map((node) => {
+                const groupOpen = expandedGroups[node.group.id] !== false;
+                const groupGoals = node.categories.flatMap((c) => c.goals);
+                const groupAssigned = groupGoals.filter((g) => isAssigned(g.id)).length;
                 return (
-                  <GoalAuditCard
-                    key={`${mg.id}-${index}`}
-                    goal={mg}
-                    assigned={assigned}
-                    completed={completed}
-                    assignedGoal={ag}
-                    admins={admins}
-                    currentAdmin={currentAdmin}
-                    onToggleAssign={() => toggleAssignment(mg.id)}
-                    onApplyCompletion={(payload) =>
-                      applyCompletionToGoal(mg.id, payload)
-                    }
-                    onUnmark={() => unmarkCompletion(mg.id)}
-                  />
+                  <div
+                    key={node.group.id}
+                    className="rounded-xl border border-border bg-secondary/10 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedGroups((p) => ({
+                          ...p,
+                          [node.group.id]: !groupOpen,
+                        }))
+                      }
+                      className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/20"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-black text-sm text-foreground">
+                          {node.group.name}
+                        </span>
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                          {groupAssigned}/{groupGoals.length} ditugaskan ·{" "}
+                          {node.categories.length} kategori
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-muted-foreground transition-transform ${groupOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {groupOpen && (
+                        <motion.div
+                          layout
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          style={{ overflow: "hidden" }}
+                        >
+                          <div className="p-3 pt-0 space-y-3 border-t border-border/40">
+                            {node.categories.map((catNode) => {
+                              const cid = catNode.category.id;
+                              const catOpen = expandedCats[cid] !== false;
+                              const assignedCount = catNode.goals.filter((g) =>
+                                isAssigned(g.id),
+                              ).length;
+                              return (
+                                <div
+                                  key={cid}
+                                  className="rounded-xl bg-card border border-border overflow-hidden"
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedCats((p) => ({ ...p, [cid]: !catOpen }))
+                                    }
+                                    className="w-full flex items-center justify-between p-3 text-left hover:bg-secondary/20"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-sm text-foreground">
+                                        {catNode.category.name}
+                                      </span>
+                                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                                        {assignedCount}/{catNode.goals.length} ditugaskan
+                                      </span>
+                                    </div>
+                                    <ChevronDown
+                                      className={`w-4 h-4 text-muted-foreground transition-transform ${catOpen ? "rotate-180" : ""}`}
+                                    />
+                                  </button>
+                                  <AnimatePresence initial={false}>
+                                    {catOpen && (
+                                      <motion.div
+                                        layout
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        style={{ overflow: "hidden" }}
+                                      >
+                                        <div className="p-3 space-y-2 border-t border-border/40">
+                                          {catNode.goals.map((mg: any, index: number) => {
+                                            const assigned = isAssigned(mg.id);
+                                            const completed = isCompleted(mg.id);
+                                            const ag = formData.assignedGoals.find(
+                                              (a) => a.goalId === mg.id,
+                                            );
+                                            return (
+                                              <GoalAuditCard
+                                                key={`${mg.id}-${index}`}
+                                                goal={mg}
+                                                assigned={assigned}
+                                                completed={completed}
+                                                assignedGoal={ag}
+                                                admins={admins}
+                                                currentAdmin={currentAdmin}
+                                                onToggleAssign={() => toggleAssignment(mg.id)}
+                                                onApplyCompletion={(payload) =>
+                                                  applyCompletionToGoal(mg.id, payload)
+                                                }
+                                                onUnmark={() => unmarkCompletion(mg.id)}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 );
               })}
             </div>

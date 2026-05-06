@@ -40,10 +40,12 @@ import type {
   MasterGoal,
   AssignedGoal,
   Category,
+  Group,
 } from "../../lib/types";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { buildHierarchy } from "@/lib/hierarchy";
 
 export // --- STUDENT PROFILE PAGE (with collapsible goals) ---
 function StudentProfilePage({
@@ -51,6 +53,7 @@ function StudentProfilePage({
   students,
   masterGoals,
   categories,
+  groups = [],
   calculateTotalPoints,
   navigateTo,
 }: {
@@ -58,11 +61,15 @@ function StudentProfilePage({
   students: Student[];
   masterGoals: MasterGoal[];
   categories: Category[];
+  groups?: Group[];
   calculateTotalPoints: (goals: AssignedGoal[]) => number;
   navigateTo: (path: string, params?: any) => void;
 }) {
   const student = students.find((s) => s.id === studentId);
   const [expandedCategories, setExpandedCategories] = useState<
+    Record<string, boolean>
+  >({});
+  const [expandedGroups, setExpandedGroups] = useState<
     Record<string, boolean>
   >({});
   // Both charts now share the same reusable TimeRangeFilter (preset + date range).
@@ -264,30 +271,31 @@ function StudentProfilePage({
   const currentRankIndex = rankedStudents.findIndex((s) => s.id === studentId);
   const currentRank = currentRankIndex >= 0 ? currentRankIndex + 1 : 0;
 
-  // Group goals by category
-  const groupedGoals = categories.reduce(
-    (acc, cat) => {
-      const goalsInCat = (student.assignedGoals || [])
-        .map((ag) => {
-          const goalData = masterGoals.find((mg) => mg.id === ag.goalId);
-          if (
-            goalData?.categoryName &&
-            goalData.categoryName.toLowerCase() ===
-              (cat.name || "").toLowerCase()
-          )
-            return { ...ag, ...goalData };
-          return null;
+  // Build the 3-tier tree, then narrow each category to only goals assigned
+  // to THIS student so the Papan Tugas reflects the student's own workload.
+  const assignedById = new Map<string, AssignedGoal>();
+  (student.assignedGoals || []).forEach((ag) => assignedById.set(ag.goalId, ag));
+  const fullTree = buildHierarchy(groups, categories, masterGoals);
+  const studentTree = fullTree
+    .map((node) => ({
+      group: node.group,
+      categories: node.categories
+        .map((c) => {
+          const goals = c.goals
+            .filter((g) => assignedById.has(g.id))
+            .map((g) => ({ ...g, ...assignedById.get(g.id)! }));
+          return { category: c.category, goals };
         })
-        .filter(Boolean) as (AssignedGoal & MasterGoal)[];
-
-      if (goalsInCat.length > 0) acc[cat.id] = goalsInCat;
-      return acc;
-    },
-    {} as Record<string, (AssignedGoal & MasterGoal)[]>,
-  );
+        .filter((c) => c.goals.length > 0),
+    }))
+    .filter((n) => n.categories.length > 0);
+  const hasAnyAssignment = studentTree.length > 0;
 
   const toggleCategory = (catId: string) => {
     setExpandedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+  };
+  const toggleGroup = (gid: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [gid]: prev[gid] === undefined ? false : !prev[gid] }));
   };
 
   return (
@@ -481,7 +489,7 @@ function StudentProfilePage({
           <Target className="w-6 h-6 text-primary" /> Papan Tugas
         </h2>
 
-        {Object.keys(groupedGoals).length === 0 ? (
+        {!hasAnyAssignment ? (
           <Card className="rounded-xl p-8 text-center shadow-soft border-border">
             <div className="w-16 h-16 bg-secondary rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Target className="w-8 h-8 text-muted-foreground" />
@@ -495,116 +503,168 @@ function StudentProfilePage({
             </p>
           </Card>
         ) : (
-          Object.entries(groupedGoals).map(([catId, goals]) => {
-            const category = categories.find((c) => c.id === catId);
-            const isExpanded = !!expandedCategories[catId];
-            const completedCount = goals.filter((g) => g.completed).length;
-            const progress =
-              goals.length > 0 ? (completedCount / goals.length) * 100 : 0;
-
+          studentTree.map((node) => {
+            const groupOpen = expandedGroups[node.group.id] !== false;
+            const groupGoals = node.categories.flatMap((c) => c.goals);
+            const groupCompleted = groupGoals.filter((g) => g.completed).length;
+            const groupPoints = groupGoals
+              .filter((g) => g.completed)
+              .reduce((sum, g) => sum + (g.points || 0), 0);
             return (
-              <Card
-                key={catId}
-                className="rounded-xl border-border overflow-hidden shadow-soft"
+              <motion.div
+                layout
+                key={node.group.id}
+                className="rounded-xl border-border bg-card border overflow-hidden shadow-soft"
               >
                 <button
-                  onClick={() => toggleCategory(catId)}
-                  className="w-full flex items-center justify-between p-5 text-left hover:bg-secondary/30 transition-colors"
+                  onClick={() => toggleGroup(node.group.id)}
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-secondary/20 transition-colors"
                 >
-                  <div className="flex flex-1 items-center gap-4">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div
-                      className={`p-3 rounded-xl ${isExpanded ? "bg-primary text-primary-foreground shadow-soft" : "bg-secondary text-muted-foreground"}`}
+                      className={`p-3 rounded-xl ${groupOpen ? "bg-primary text-primary-foreground shadow-soft" : "bg-secondary text-muted-foreground"}`}
                     >
                       <FolderTree className="h-6 w-6" />
                     </div>
-                    <div className="flex-1 min-w-0 pr-4">
-                      <h3
-                        className="font-bold text-foreground line-clamp-2 break-words leading-tight mb-1"
-                        title={category?.name}
-                      >
-                        {category?.name}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-black text-foreground leading-tight mb-1 truncate">
+                        {node.group.name}
                       </h3>
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
-                          <motion.div
-                            className="h-full bg-primary rounded-full"
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                          />
-                        </div>
-                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest min-w-[3rem] text-right">
-                          {Math.round(progress)}%
-                        </span>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                          {groupCompleted}/{groupGoals.length} selesai
+                        </Badge>
+                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                          {groupPoints} pts
+                        </Badge>
+                        <Badge variant="secondary" className="text-[10px] px-2 py-0.5">
+                          {node.categories.length} kategori
+                        </Badge>
                       </div>
                     </div>
                   </div>
-                  {isExpanded ? (
+                  {groupOpen ? (
                     <ChevronUp className="h-5 w-5 text-muted-foreground shrink-0" />
                   ) : (
                     <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
                   )}
                 </button>
-
-                <AnimatePresence>
-                  {isExpanded && (
+                <AnimatePresence initial={false}>
+                  {groupOpen && (
                     <motion.div
-                      initial={{ height: 0 }}
-                      animate={{ height: "auto" }}
-                      exit={{ height: 0 }}
+                      layout
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden bg-background border-t border-border"
                     >
-                      <div className="p-4 space-y-3">
-                        {goals.map((goal, idx) => (
-                          <div
-                            key={`${goal.id}-${idx}`}
-                            className="flex items-center gap-4 bg-card p-4 rounded-2xl border-none shadow-soft transition-all relative overflow-hidden"
-                          >
-                            {/* Accent line for completed goals */}
-                            {goal.completed && (
-                              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-                            )}
-
-                            <div
-                              className={`shrink-0 z-10 ${goal.completed ? "text-primary" : "text-muted-foreground"}`}
+                      <div className="p-3 space-y-3">
+                        {node.categories.map((catNode) => {
+                          const cid = catNode.category.id;
+                          const isExpanded = expandedCategories[cid] !== false;
+                          const goals = catNode.goals;
+                          const completedCount = goals.filter((g) => g.completed).length;
+                          const progress =
+                            goals.length > 0 ? (completedCount / goals.length) * 100 : 0;
+                          return (
+                            <Card
+                              key={cid}
+                              className="rounded-xl border-border overflow-hidden shadow-none border"
                             >
-                              {goal.completed ? (
-                                <CheckCircle2 className="w-6 h-6 fill-primary-foreground" />
-                              ) : (
-                                <Circle className="w-6 h-6" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0 z-10">
-                              <h4
-                                className={`text-[clamp(0.875rem,3.5vw,1rem)] font-bold line-clamp-2 break-words leading-tight ${goal.completed ? "text-muted-foreground line-through decoration-muted-foreground/30" : "text-foreground"}`}
-                                title={goal.title}
+                              <button
+                                onClick={() => toggleCategory(cid)}
+                                className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/20 transition-colors"
                               >
-                                {goal.title}
-                              </h4>
-                              <p
-                                className="text-[clamp(0.65rem,2.5vw,0.75rem)] text-muted-foreground line-clamp-2 break-words mt-1"
-                                title={goal.description}
-                              >
-                                {goal.description}
-                              </p>
-                            </div>
-                            <Badge
-                              variant={goal.completed ? "secondary" : "default"}
-                              className="z-10 px-2 py-1"
-                            >
-                              +
-                              {goal.points !== undefined
-                                ? goal.points
-                                : (goal as any).pointValue || 0}{" "}
-                              pts
-                            </Badge>
-                          </div>
-                        ))}
+                                <div className="flex-1 min-w-0 pr-4">
+                                  <h4
+                                    className="font-bold text-foreground leading-tight mb-1 truncate"
+                                    title={catNode.category.name}
+                                  >
+                                    {catNode.category.name}
+                                  </h4>
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-2 bg-secondary rounded-full overflow-hidden">
+                                      <motion.div
+                                        className="h-full bg-primary rounded-full"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${progress}%` }}
+                                        transition={{ duration: 0.8, ease: "easeOut" }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest min-w-[3rem] text-right">
+                                      {completedCount}/{goals.length}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                                )}
+                              </button>
+                              <AnimatePresence initial={false}>
+                                {isExpanded && (
+                                  <motion.div
+                                    layout
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden border-t border-border"
+                                  >
+                                    <div className="p-3 space-y-2">
+                                      {goals.map((goal: any, idx: number) => (
+                                        <div
+                                          key={`${goal.id}-${idx}`}
+                                          className="flex items-center gap-3 bg-card p-3 rounded-xl border border-border/60 transition-all relative overflow-hidden"
+                                        >
+                                          {goal.completed && (
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+                                          )}
+                                          <div
+                                            className={`shrink-0 z-10 ${goal.completed ? "text-primary" : "text-muted-foreground"}`}
+                                          >
+                                            {goal.completed ? (
+                                              <CheckCircle2 className="w-5 h-5" />
+                                            ) : (
+                                              <Circle className="w-5 h-5" />
+                                            )}
+                                          </div>
+                                          <div className="flex-1 min-w-0 z-10">
+                                            <h5
+                                              className={`text-sm font-bold leading-tight ${goal.completed ? "text-muted-foreground line-through decoration-muted-foreground/30" : "text-foreground"}`}
+                                              title={goal.title}
+                                            >
+                                              {goal.title}
+                                            </h5>
+                                            {goal.description && (
+                                              <p
+                                                className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5"
+                                                title={goal.description}
+                                              >
+                                                {goal.description}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <Badge
+                                            variant={goal.completed ? "secondary" : "default"}
+                                            className="z-10 px-2 py-1 shrink-0"
+                                          >
+                                            +{goal.points ?? 0} pts
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </Card>
+                          );
+                        })}
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </Card>
+              </motion.div>
             );
           })
         )}
