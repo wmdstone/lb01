@@ -40,10 +40,12 @@ import type {
   MasterGoal,
   AssignedGoal,
   Category,
+  Group,
 } from "../../lib/types";
 import { ActionMenu } from "../ui/ActionMenu";
 import { ConfirmModal } from "../ui/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { buildHierarchy } from "@/lib/hierarchy";
 
 export // --- STUDENT PROFILE PAGE (with collapsible goals) ---
 function StudentProfilePage({
@@ -51,6 +53,7 @@ function StudentProfilePage({
   students,
   masterGoals,
   categories,
+  groups = [],
   calculateTotalPoints,
   navigateTo,
 }: {
@@ -58,6 +61,7 @@ function StudentProfilePage({
   students: Student[];
   masterGoals: MasterGoal[];
   categories: Category[];
+  groups?: Group[];
   calculateTotalPoints: (goals: AssignedGoal[]) => number;
   navigateTo: (path: string, params?: any) => void;
 }) {
