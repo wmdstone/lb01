@@ -366,6 +366,7 @@ export function AdminStudentsTab({
   refreshData,
   masterGoals,
   categories,
+  groups = [],
   calculateTotalPoints,
 }: any) {
   const [searchFilter, setSearchFilter] = useState<StudentSearchFilterValue>(
