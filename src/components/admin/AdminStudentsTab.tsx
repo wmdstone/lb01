@@ -655,6 +655,7 @@ function StudentAdminModal({
   student,
   masterGoals,
   categories,
+  groups,
   onClose,
   onSave,
 }: any) {
@@ -670,6 +671,8 @@ function StudentAdminModal({
   });
 
   const [filterCat, setFilterCat] = useState("ALL");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({});
   const [tagInput, setTagInput] = useState("");
 
   const addTag = () => {
@@ -689,14 +692,28 @@ function StudentAdminModal({
     }));
   };
 
-  const displayedMasterGoals =
-    filterCat === "ALL"
-      ? masterGoals
-      : masterGoals.filter(
-          (mg: any) =>
-            (mg.categoryName || "").toLowerCase() ===
-            String(filterCat).toLowerCase(),
-        );
+  // Build the 3-tier tree once, then optionally narrow by selected category.
+  const tree = useMemo(
+    () => buildHierarchy(groups || [], categories, masterGoals),
+    [groups, categories, masterGoals],
+  );
+  const filteredTree = useMemo(() => {
+    if (filterCat === "ALL") return tree;
+    const wanted = String(filterCat).toLowerCase();
+    return tree
+      .map((node) => ({
+        ...node,
+        categories: node.categories.filter(
+          (c) => (c.category.name || "").toLowerCase() === wanted,
+        ),
+      }))
+      .filter((n) => n.categories.length > 0);
+  }, [tree, filterCat]);
+  // Flat list of goals visible after filter — drives bulk-action helpers below.
+  const displayedMasterGoals: MasterGoal[] = useMemo(
+    () => filteredTree.flatMap((n) => n.categories.flatMap((c) => c.goals)),
+    [filteredTree],
+  );
 
   const isAssigned = (goalId: string) =>
     formData.assignedGoals.some((ag) => ag.goalId === goalId);
