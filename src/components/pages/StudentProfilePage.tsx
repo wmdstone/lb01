@@ -271,30 +271,31 @@ function StudentProfilePage({
   const currentRankIndex = rankedStudents.findIndex((s) => s.id === studentId);
   const currentRank = currentRankIndex >= 0 ? currentRankIndex + 1 : 0;
 
-  // Group goals by category
-  const groupedGoals = categories.reduce(
-    (acc, cat) => {
-      const goalsInCat = (student.assignedGoals || [])
-        .map((ag) => {
-          const goalData = masterGoals.find((mg) => mg.id === ag.goalId);
-          if (
-            goalData?.categoryName &&
-            goalData.categoryName.toLowerCase() ===
-              (cat.name || "").toLowerCase()
-          )
-            return { ...ag, ...goalData };
-          return null;
+  // Build the 3-tier tree, then narrow each category to only goals assigned
+  // to THIS student so the Papan Tugas reflects the student's own workload.
+  const assignedById = new Map<string, AssignedGoal>();
+  (student.assignedGoals || []).forEach((ag) => assignedById.set(ag.goalId, ag));
+  const fullTree = buildHierarchy(groups, categories, masterGoals);
+  const studentTree = fullTree
+    .map((node) => ({
+      group: node.group,
+      categories: node.categories
+        .map((c) => {
+          const goals = c.goals
+            .filter((g) => assignedById.has(g.id))
+            .map((g) => ({ ...g, ...assignedById.get(g.id)! }));
+          return { category: c.category, goals };
         })
-        .filter(Boolean) as (AssignedGoal & MasterGoal)[];
-
-      if (goalsInCat.length > 0) acc[cat.id] = goalsInCat;
-      return acc;
-    },
-    {} as Record<string, (AssignedGoal & MasterGoal)[]>,
-  );
+        .filter((c) => c.goals.length > 0),
+    }))
+    .filter((n) => n.categories.length > 0);
+  const hasAnyAssignment = studentTree.length > 0;
 
   const toggleCategory = (catId: string) => {
     setExpandedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+  };
+  const toggleGroup = (gid: string) => {
+    setExpandedGroups((prev) => ({ ...prev, [gid]: prev[gid] === undefined ? false : !prev[gid] }));
   };
 
   return (
