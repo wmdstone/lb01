@@ -39,6 +39,7 @@ import type {
   MasterGoal,
   AssignedGoal,
   Student,
+  Group,
 } from "../../lib/types";
 
 // --- ADMIN DASHBOARD ---
@@ -47,6 +48,7 @@ export function AdminDashboard({
   refreshData,
   masterGoals,
   categories,
+  groups = [],
   calculateTotalPoints,
   appSettings,
   setAppSettings,
@@ -56,6 +58,7 @@ export function AdminDashboard({
   refreshData: () => void;
   masterGoals: MasterGoal[];
   categories: Category[];
+  groups?: Group[];
   calculateTotalPoints: (goals: AssignedGoal[]) => number;
   appSettings: any;
   setAppSettings: any;
@@ -191,6 +194,7 @@ export function AdminDashboard({
               refreshData={refreshData}
               masterGoals={masterGoals}
               categories={categories}
+              groups={groups}
               calculateTotalPoints={calculateTotalPoints}
             />
           )}
@@ -199,6 +203,7 @@ export function AdminDashboard({
               masterGoals={masterGoals}
               refreshData={refreshData}
               categories={categories}
+              groups={groups}
             />
           )}
           {activeTab === "blog" && <AdminBlogTab />}
