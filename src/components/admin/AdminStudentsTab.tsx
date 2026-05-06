@@ -1073,7 +1073,7 @@ function StudentAdminModal({
                 onValueChange={setFilterCat}
                 options={[
                   { value: "ALL", label: "Semua Kategori" },
-                  ...categories.map((c: any) => ({
+                  ...sortByOrder(categories).map((c: any) => ({
                     value: c.name,
                     label: c.name
                   }))
