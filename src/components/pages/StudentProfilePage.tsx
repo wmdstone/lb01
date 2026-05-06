@@ -69,6 +69,9 @@ function StudentProfilePage({
   const [expandedCategories, setExpandedCategories] = useState<
     Record<string, boolean>
   >({});
+  const [expandedGroups, setExpandedGroups] = useState<
+    Record<string, boolean>
+  >({});
   // Both charts now share the same reusable TimeRangeFilter (preset + date range).
   const [historyFilterValue, setHistoryFilterValue] = useState<TimeRangeValue>(
     () => createDefaultTimeRangeValue("all-time"),
