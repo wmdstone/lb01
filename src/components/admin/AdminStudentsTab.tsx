@@ -54,6 +54,7 @@ import type {
   MasterGoal,
   AssignedGoal,
   Student,
+  Group,
 } from "../../lib/types";
 import { TimeRangeValue } from "../TimeRangeFilter";
 import { StudentSearchFilterValue } from "../StudentSearchFilter";
@@ -86,6 +87,11 @@ import { useAuthRole } from "@/hooks/useAuthRole";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import type { StudentAchievement } from "@/lib/types";
+import {
+  buildHierarchy,
+  sortByOrder,
+  FALLBACK_GROUP_ID,
+} from "@/lib/hierarchy";
 
 // ---------------------------------------------------------------------------
 // Inline collapsible audit card — replaces the legacy CompletionAuditPanel.
