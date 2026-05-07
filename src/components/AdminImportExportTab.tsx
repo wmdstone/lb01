@@ -13,6 +13,7 @@ import { toCSV, downloadCSV, parseCSV } from "../lib/csv";
 import { z } from "zod";
 import { toast } from "sonner";
 import { writeBatch, doc, collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/firebase";
 import { 
   blogPostsCol, 
   activityLogsCol, 
@@ -249,8 +250,8 @@ export function AdminImportExportTab({
         alert("Pengeksporan statistik untuk sementara dinonaktifkan dalam mode koneksi langsung ke Firestore.");
         return;
       } else if (key === "logs") {
-        const logs = await listAll(activityLogsCol);
-        csv = toCSV(logs || [], [
+        const logs = await listAll<any>(activityLogsCol);
+        csv = toCSV((logs as any[]) || [], [
           "timestamp",
           "type",
           "action",
@@ -275,10 +276,6 @@ export function AdminImportExportTab({
   const importFullSnapshot = async (
     validatedData: z.infer<typeof SnapshotSchema>,
   ) => {
-    const conn = getActiveConnection();
-    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
-    const db = connectFirestore(conn.id, cfg);
-
     // Map JSON section → Firestore collection name. The keys mirror what the
     // export writes; values are the destination collections.
     const SECTION_TO_COLLECTION: Record<string, string> = {
