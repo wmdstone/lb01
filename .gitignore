@@ -5,6 +5,3 @@ coverage/
 *.log
 .env*
 !.env.example
-
-# AI Studio Sandbox
-.ai-helpers/
