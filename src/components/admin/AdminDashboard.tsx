@@ -21,7 +21,7 @@ import {
   HardDrive,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { removeLocalToken } from "../../lib/api";
+import { removeLocalToken } from "../../lib/auth";
 import { auth } from "../../lib/firebase/firebase";
 import { signOut } from "firebase/auth";
 import { trackEvent } from "../../lib/analytics";
