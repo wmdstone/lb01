@@ -80,6 +80,26 @@ Delete in order once Phase C is green and typecheck clean:
 7. `src/integrations/supabase/*` if no imports remain
 8. Stray shims in `src/lib/` whose home is `utils/` or `services/`
 
+## Progress log
+
+- **Phase A + B**: complete. Typed collections (`src/lib/firebase/collections.ts`), composable query helpers (`src/lib/firebase/queries.ts`), and the `createDomainHooks` factory plus per-domain hooks in `src/hooks/queries/` are live.
+- **Phase C (consumers)**: complete for the build path. All admin tabs, public pages, and the layout shell now import directly from `@/hooks/queries/*` and `firebase/firestore`. Missing third-party deps (firebase, react-query, radix-ui set, dnd-kit, tiptap stack, recharts, sonner, date-fns, etc.) installed; duplicate root `components/`, `hooks/`, `lib/` shims deleted.
+- **Phase E (partial)**: legacy `src/lib/api.ts` and `src/integrations/supabase/*` removed; remaining `lib/auth.ts` is the single token shim. `firebaseApi.ts`, `dbConnections.ts`, `firestoreDriver.ts`, `lib/db/`, `firebaseClient.ts` were already absent.
+- **Runtime fix (root layout)**: `app/layout.tsx` now mounts `ReactQueryClientProvider` + `ClientLayout` so client hooks (`useAuthQuery`, `useAppDataQuery`, factory `useList`) resolve a `QueryClient`. This unblocks every `"use client"` route that consumes Phase B hooks.
+- **Phase D (started)**: `app/blog/[slug]/page.tsx` is now an RSC with `revalidate = 600`. Remaining public routes (`/`, `/blog`, `/leaderboard`, `/student/[id]`, `/berita/kategori`, `/berita/kategori/[slug]`) are still `"use client" + dynamic(ssr:false)` shells — they work via the new provider and are ready for RSC conversion in the next pass.
+
+## Next up — Phase D readiness
+
+Convert the remaining read-only public routes off `dynamic(ssr:false)`:
+
+1. `app/page.tsx` (landing) → RSC, fetch `appSettings` + featured data via Firebase Web SDK in a server util, hydrate a thin client island for interactive bits. `revalidate = 600`.
+2. `app/blog/page.tsx` → RSC list, `revalidate = 600`.
+3. `app/leaderboard/page.tsx` → RSC, server-side `calculateTotalPoints`, `revalidate = 300`.
+4. `app/student/[id]/page.tsx` → RSC + `generateStaticParams` for top N, `revalidate = 300`.
+5. `app/berita/kategori/(page|[slug])` → RSC + `generateStaticParams`, `revalidate = 600`.
+
+Server-side data access continues to use `firebase/firestore` Web SDK (rule-gated public reads) — no Admin SDK required. Each conversion: extract a `loadX()` server helper, render the existing presentational component as a Server Component, and keep only stateful widgets in client islands wrapped under the existing providers.
+
 ## Phase F — Verification
 
 - `bunx tsc --noEmit` clean
