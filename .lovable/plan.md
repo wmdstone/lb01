@@ -86,7 +86,20 @@ Delete in order once Phase C is green and typecheck clean:
 - **Phase C (consumers)**: complete for the build path. All admin tabs, public pages, and the layout shell now import directly from `@/hooks/queries/*` and `firebase/firestore`. Missing third-party deps (firebase, react-query, radix-ui set, dnd-kit, tiptap stack, recharts, sonner, date-fns, etc.) installed; duplicate root `components/`, `hooks/`, `lib/` shims deleted.
 - **Phase E (partial)**: legacy `src/lib/api.ts` and `src/integrations/supabase/*` removed; remaining `lib/auth.ts` is the single token shim. `firebaseApi.ts`, `dbConnections.ts`, `firestoreDriver.ts`, `lib/db/`, `firebaseClient.ts` were already absent.
 - **Runtime fix (root layout)**: `app/layout.tsx` now mounts `ReactQueryClientProvider` + `ClientLayout` so client hooks (`useAuthQuery`, `useAppDataQuery`, factory `useList`) resolve a `QueryClient`. This unblocks every `"use client"` route that consumes Phase B hooks.
-- **Phase D (started)**: `app/blog/[slug]/page.tsx` is now an RSC with `revalidate = 600`. Remaining public routes (`/`, `/blog`, `/leaderboard`, `/student/[id]`, `/berita/kategori`, `/berita/kategori/[slug]`) are still `"use client" + dynamic(ssr:false)` shells — they work via the new provider and are ready for RSC conversion in the next pass.
+- **Phase D (in progress)**:
+  - `app/blog/[slug]/page.tsx` — RSC, `revalidate = 600`.
+  - `app/page.tsx` (landing) — RSC wrapper, `revalidate = 600`. Inner `LandingPage` stays a client island.
+  - `app/blog/page.tsx` — RSC wrapper, `revalidate = 600`.
+  - `app/berita/kategori/page.tsx` — RSC wrapper, `revalidate = 600`.
+  - `app/berita/kategori/[slug]/page.tsx` — RSC wrapper with awaited `params`, `revalidate = 600`.
+  - `app/leaderboard/page.tsx` and `app/student/[id]/page.tsx` — dropped `dynamic(ssr:false)`; now SSR-friendly client pages (still need full RSC split + `generateStaticParams`).
+- **Phase E (cleanup)**: re-removed the regenerated `src/integrations/supabase/*` shim (no consumers remain).
+
+## Next up — finish Phase D
+
+1. Promote `app/leaderboard/page.tsx` to a true RSC: move `useAppDataQuery` + `calculateTotalPoints` into a small client island, fetch students/goals server-side via `firebase/firestore` Web SDK, `revalidate = 300`.
+2. Promote `app/student/[id]/page.tsx` to RSC + `generateStaticParams` for top-N students, `revalidate = 300`.
+3. Add `generateStaticParams` to `app/blog/[slug]` and `app/berita/kategori/[slug]` for popular slugs.
 
 ## Next up — Phase D readiness
 
