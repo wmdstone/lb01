@@ -871,6 +871,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
   );
 
   return (
+    <>
     <div className="p-4 sm:p-8 space-y-10">
       {/* HEADER */}
       <div>
