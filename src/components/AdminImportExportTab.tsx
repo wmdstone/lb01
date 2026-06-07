@@ -557,7 +557,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
     }
     // From here, TS knows it's a "names-only" path. Re-widen so the existing
     // (intentional) branches that also accept the full forms still compile.
-    const it: ImportType = importType;
+    const it = importType as ImportType;
     setBusy("import");
     setImportMessage(null);
     const findCol = (candidates: string[]): string | null => {
