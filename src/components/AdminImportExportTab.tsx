@@ -15,6 +15,12 @@ import { toast } from "sonner";
 import { writeBatch, doc, collection, getDocs } from "firebase/firestore";
 import { getActiveConnection } from "../lib/dbConnections";
 import { connectFirestore, parseFirebaseConfig } from "../lib/firestoreDriver";
+import {
+  planImport,
+  API_PATH,
+  type ImportMode,
+  type ImportPlan,
+} from "../lib/import/planImport";
 
 type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -91,6 +97,12 @@ export function AdminImportExportTab({
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0); // 0..100
   const [importStatus, setImportStatus] = useState<string>("");
+
+  // Smart-import dry-run state
+  const [plan, setPlan] = useState<ImportPlan<any> | null>(null);
+  const [planMode, setPlanMode] = useState<ImportMode | null>(null);
+  const [ignoreInvalid, setIgnoreInvalid] = useState(false);
+  const [committing, setCommitting] = useState(false);
 
   const goalById = useMemo(() => {
     const m = new Map<string, any>();
