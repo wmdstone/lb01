@@ -13,15 +13,10 @@ import { toCSV, downloadCSV, parseCSV } from "../lib/csv";
 import { z } from "zod";
 import { toast } from "sonner";
 import { writeBatch, doc, collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase/firebase";
-import { 
-  blogPostsCol, 
-  activityLogsCol, 
-  studentsCol, 
-  categoriesCol, 
-  goalsCol 
-} from "@/lib/firebase/collections";
-import { listAll, upsert } from "@/lib/firebase/queries";
+import { getActiveConnection } from "../lib/dbConnections";
+import { connectFirestore, parseFirebaseConfig } from "../lib/firestoreDriver";
+
+type ApiFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 const SnapshotSchema = z
   .object({
@@ -34,6 +29,7 @@ const SnapshotSchema = z
     students: z.array(z.any()).optional(),
     masterGoals: z.array(z.any()).optional(),
     categories: z.array(z.any()).optional(),
+    groups: z.array(z.any()).optional(),
     posts: z.array(z.any()).optional(),
     logs: z.array(z.any()).optional(),
     tracks: z.array(z.any()).optional(),
@@ -43,6 +39,7 @@ const SnapshotSchema = z
   .catchall(z.any());
 
 interface Props {
+  apiFetch: ApiFetch;
   students: any[];
   masterGoals: any[];
   categories: any[];
@@ -53,6 +50,7 @@ type DatasetKey =
   | "students"
   | "goals"
   | "categories"
+  | "groups"
   | "tracks_full"
   | "stats_overview"
   | "stats_chart"
@@ -62,11 +60,13 @@ type ImportType =
   | "students_names"
   | "goals"
   | "goals_titles"
-  | "categories";
+  | "categories"
+  | "groups";
 
 const today = () => new Date().toISOString().split("T")[0];
 
 export function AdminImportExportTab({
+  apiFetch,
   students,
   masterGoals,
   categories,
@@ -107,12 +107,21 @@ export function AdminImportExportTab({
   const handleFullSnapshotJSONExport = async () => {
     setBusy("full_json");
     try {
-      const [posts, logs] = await Promise.all([
-        listAll(blogPostsCol),
-        listAll(activityLogsCol),
+      // Fetch via API where possible
+      const [postsRes, logsRes, groupsRes] = await Promise.all([
+        apiFetch("/api/posts"),
+        apiFetch("/api/logs"),
+        apiFetch("/api/groups"),
       ]);
+      const posts = postsRes.ok ? await postsRes.json() : [];
+      const logs = logsRes.ok ? await logsRes.json() : [];
+      const groups = groupsRes.ok ? await groupsRes.json() : [];
 
-      const db = studentsCol.firestore;
+      // Pull relational/historical collections directly from Firestore so we
+      // can keep the original document IDs (foreign-keys) intact.
+      const conn = getActiveConnection();
+      const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+      const db = connectFirestore(conn.id, cfg);
 
       const RELATIONAL = [
         "tracks",
@@ -142,12 +151,14 @@ export function AdminImportExportTab({
       const snapshot = {
         metadata: {
           generated_at: new Date().toISOString(),
-          version: "2.0-relational",
+          version: "2.1-relational-groups",
+          source_connection: conn.id,
         },
-        students: withId(students),
+        groups: withId(groups),
+        categories: withId(categories),
         masterGoals: withId(masterGoals),
         goals: withId(masterGoals), // alias for downstream consumers
-        categories: withId(categories),
+        students: withId(students),
         posts: withId(posts),
         logs: withId(logs),
         tracks: relational.tracks || [],
@@ -209,13 +220,27 @@ export function AdminImportExportTab({
           title: g.title,
           points: g.points,
           description: g.description || "",
+          category_id: g.categoryId || "",
           category_name: g.categoryName || "",
+          order: g.order ?? "",
         }));
         csv = toCSV(rows);
       } else if (key === "categories") {
         const rows = (categories || []).map((c) => ({
           id: c.id,
           name: c.name,
+          group_id: c.groupId || "",
+          order: c.order ?? "",
+        }));
+        csv = toCSV(rows);
+      } else if (key === "groups") {
+        const res = await apiFetch("/api/groups");
+        const groups = res.ok ? await res.json() : [];
+        const rows = (groups || []).map((g: any) => ({
+          id: g.id,
+          name: g.name,
+          order: g.order ?? "",
+          is_system: g.isSystem ? "true" : "false",
         }));
         csv = toCSV(rows);
       } else if (key === "tracks_full") {
@@ -247,11 +272,33 @@ export function AdminImportExportTab({
           "completed_at",
         ]);
       } else if (key === "stats_overview" || key === "stats_chart") {
-        alert("Pengeksporan statistik untuk sementara dinonaktifkan dalam mode koneksi langsung ke Firestore.");
-        return;
+        const res = await apiFetch(`/api/stats?range=${statsRange}`);
+        if (!res.ok) throw new Error("Failed to fetch stats");
+        const stats = await res.json();
+        if (key === "stats_overview") {
+          const rows = [
+            {
+              range: statsRange,
+              generated_at: new Date().toISOString(),
+              total_students: stats.totalStudents,
+              total_active_goals: stats.totalActiveGoals,
+              total_categories: stats.totalCategories,
+              completed_goals: stats.completedGoals,
+              total_points: stats.totalPoints,
+              unique_visitors: stats.uniqueVisitors,
+            },
+          ];
+          csv = toCSV(rows);
+          filename = `stats_overview_${statsRange}_${today()}.csv`;
+        } else {
+          csv = toCSV(stats.chartData || [], ["date", "points"]);
+          filename = `stats_points_trend_${statsRange}_${today()}.csv`;
+        }
       } else if (key === "logs") {
-        const logs = await listAll<any>(activityLogsCol);
-        csv = toCSV((logs as any[]) || [], [
+        const res = await apiFetch("/api/logs");
+        if (!res.ok) throw new Error("Failed to fetch logs");
+        const logs = await res.json();
+        csv = toCSV(logs || [], [
           "timestamp",
           "type",
           "action",
@@ -276,9 +323,14 @@ export function AdminImportExportTab({
   const importFullSnapshot = async (
     validatedData: z.infer<typeof SnapshotSchema>,
   ) => {
+    const conn = getActiveConnection();
+    const cfg = conn.firebaseConfig || parseFirebaseConfig(conn.key);
+    const db = connectFirestore(conn.id, cfg);
+
     // Map JSON section → Firestore collection name. The keys mirror what the
     // export writes; values are the destination collections.
     const SECTION_TO_COLLECTION: Record<string, string> = {
+      groups: "groups",
       categories: "categories",
       masterGoals: "master_goals",
       goals: "master_goals",
@@ -290,6 +342,7 @@ export function AdminImportExportTab({
     };
     // Insert in dependency order so foreign-key references resolve cleanly.
     const ORDER = [
+      "groups",
       "categories",
       "masterGoals",
       "goals",
@@ -300,6 +353,41 @@ export function AdminImportExportTab({
       "historical_achievements",
     ];
 
+    // Convert API/camelCase rows to Firestore snake_case shape so the read
+    // mappers can rebuild them on next load.
+    const toFirestoreShape = (section: string, row: any): any => {
+      const r = { ...row };
+      delete r.id;
+      if (section === "groups") {
+        const out: any = { name: r.name, order: r.order ?? 0 };
+        if (r.isSystem !== undefined) out.is_system = !!r.isSystem;
+        else if (r.is_system !== undefined) out.is_system = !!r.is_system;
+        return out;
+      }
+      if (section === "categories") {
+        const out: any = { name: r.name };
+        if (r.order !== undefined) out.order = r.order;
+        const gid = r.groupId ?? r.group_id ?? null;
+        out.group_id = gid || null;
+        return out;
+      }
+      if (section === "masterGoals" || section === "goals") {
+        const out: any = {
+          title: r.title,
+          points: r.points ?? 0,
+          description: r.description || "",
+        };
+        if (r.order !== undefined) out.order = r.order;
+        const cid = r.categoryId ?? r.category_id ?? null;
+        if (cid) out.category_id = cid;
+        const cname = r.categoryName ?? r.category_name ?? "";
+        if (cname) out.category_name = cname;
+        return out;
+      }
+      // Other sections: leave as-is (students/posts/logs/tracks/historical_*)
+      return r;
+    };
+
     type Op = { collection: string; section: string; id: string; data: any };
     const ops: Op[] = [];
     for (const section of ORDER) {
@@ -308,14 +396,19 @@ export function AdminImportExportTab({
       if (!rows.length || !collName) continue;
       for (const raw of rows) {
         if (!raw) continue;
-        const { id, ...rest } = raw;
+        const { id } = raw;
         // Preserve the original document id whenever present so relational
         // links (studentId, goalId, trackId, …) survive the round-trip.
         const docId =
           id != null && String(id).length > 0
             ? String(id)
             : doc(collection(db, collName)).id;
-        ops.push({ collection: collName, section, id: docId, data: rest });
+        ops.push({
+          collection: collName,
+          section,
+          id: docId,
+          data: toFirestoreShape(section, raw),
+        });
       }
     }
 
@@ -377,6 +470,7 @@ export function AdminImportExportTab({
         masterGoals:
           validatedData.masterGoals?.length || validatedData.goals?.length || 0,
         categories: validatedData.categories?.length || 0,
+        groups: (validatedData as any).groups?.length || 0,
         posts: validatedData.posts?.length || 0,
         logs: validatedData.logs?.length || 0,
         tracks: (validatedData as any).tracks?.length || 0,
@@ -384,15 +478,17 @@ export function AdminImportExportTab({
           (validatedData as any).historical_achievements?.length || 0,
       };
       const summary = `Dry Run Summary (relational restore):
-- Students: ${counts.students}
-- Goals: ${counts.masterGoals}
+- Groups: ${counts.groups}
 - Categories: ${counts.categories}
+- Goals: ${counts.masterGoals}
+- Students: ${counts.students}
 - Posts: ${counts.posts}
 - Logs: ${counts.logs}
 - Tracks: ${counts.tracks}
 - Historical achievements: ${counts.historical_achievements}
 
-Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 450 op. Lanjutkan?`;
+Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tetap valid) dalam batch 450 op. Lanjutkan?`;
+      if (!confirm(summary)) return;
       if (!confirm(summary)) return;
 
       const toastId = toast.loading("Memulai restorasi relasional…");
@@ -475,10 +571,13 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
                   .filter(Boolean);
             }
           }
-          try {
-            await upsert(studentsCol, crypto.randomUUID(), payload);
-            inserted++;
-          } catch (e: any) {
+          const res = await apiFetch("/api/students", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) inserted++;
+          else {
             failed++;
             errors.push(`Row "${name}" failed`);
           }
@@ -509,10 +608,16 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
           );
           for (const [slug, name] of uniqueNames.entries()) {
             if (existing.has(slug)) continue;
-            await upsert<any>(categoriesCol, slug, { name }).catch(() => {});
+            await apiFetch("/api/categories", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: slug, name }),
+            }).catch(() => {});
           }
         }
-        // ---- Insert Goals (linked by categoryName as natural FK). ----
+        // ---- Insert Goals (linked by categoryId/categoryName as natural FK). ----
+        const catIdCol = findCol(["category_id", "categoryid", "categoryId"]);
+        const orderCol = findCol(["order", "sort_order", "position"]);
         for (const row of previewRows) {
           const title = (row[titleCol] || "").trim();
           if (!title) continue;
@@ -524,11 +629,19 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
             if (descCol) payload.description = row[descCol] || "";
             if (catNameCol && row[catNameCol])
               payload.categoryName = (row[catNameCol] || "").trim();
+            if (catIdCol && row[catIdCol]) payload.categoryId = row[catIdCol].trim();
+            if (orderCol && row[orderCol] !== "") {
+              const o = parseInt(String(row[orderCol] || "0"), 10);
+              if (!isNaN(o)) payload.order = o;
+            }
           }
-          try {
-            await upsert(goalsCol, crypto.randomUUID(), payload);
-            inserted++;
-          } catch (e: any) {
+          const res = await apiFetch("/api/masterGoals", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) inserted++;
+          else {
             failed++;
             errors.push(`Row "${title}" failed`);
           }
@@ -536,13 +649,47 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
       } else if (importType === "categories") {
         const nameCol = findCol(["name", "category", "category_name"]);
         if (!nameCol) throw new Error('CSV must have a "name" column.');
+        const groupIdCol = findCol(["group_id", "groupid", "groupId"]);
+        const orderCol = findCol(["order", "sort_order", "position"]);
         for (const row of previewRows) {
           const name = (row[nameCol] || "").trim();
           if (!name) continue;
-          try {
-            await upsert<any>(categoriesCol, crypto.randomUUID(), { name });
-            inserted++;
-          } catch (e: any) {
+          const payload: any = { name };
+          if (groupIdCol && row[groupIdCol]) payload.groupId = row[groupIdCol].trim();
+          if (orderCol && row[orderCol] !== "") {
+            const o = parseInt(String(row[orderCol] || "0"), 10);
+            if (!isNaN(o)) payload.order = o;
+          }
+          const res = await apiFetch("/api/categories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) inserted++;
+          else {
+            failed++;
+            errors.push(`Row "${name}" failed`);
+          }
+        }
+      } else if (importType === "groups") {
+        const nameCol = findCol(["name", "group", "group_name"]);
+        if (!nameCol) throw new Error('CSV must have a "name" column.');
+        const orderCol = findCol(["order", "sort_order", "position"]);
+        for (const row of previewRows) {
+          const name = (row[nameCol] || "").trim();
+          if (!name) continue;
+          const payload: any = { name };
+          if (orderCol && row[orderCol] !== "") {
+            const o = parseInt(String(row[orderCol] || "0"), 10);
+            if (!isNaN(o)) payload.order = o;
+          }
+          const res = await apiFetch("/api/groups", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) inserted++;
+          else {
             failed++;
             errors.push(`Row "${name}" failed`);
           }
@@ -551,11 +698,15 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
 
       // Log activity
       try {
-        await upsert<any>(activityLogsCol, crypto.randomUUID(), {
-          action: "CSV Import",
-          details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
-          type: "system",
-          timestamp: new Date().toISOString(),
+        await apiFetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "CSV Import",
+            details: `Imported ${inserted} ${importType} rows (${failed} failed)`,
+            type: "system",
+            timestamp: new Date().toISOString(),
+          }),
         });
       } catch {}
 
@@ -686,9 +837,15 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
           <ExportCard
             icon={Database}
             title="Categories"
-            subtitle="Goal category list"
+            subtitle="Goal category list (with group_id, order)"
             dataKey="categories"
             count={categories?.length}
+          />
+          <ExportCard
+            icon={Database}
+            title="Groups"
+            subtitle="Top-level group list (Kelas / Tingkatan)"
+            dataKey="groups"
           />
           <ExportCard
             icon={FileText}
@@ -786,8 +943,14 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
                     setBusy('seeding');
                     const toastId = toast.loading('Sedang melakukan seeding data...');
                     try {
-                      alert("Penyemaian data awal (seeding) tidak didukung pada mode langsung ini.");
-                      toast.dismiss(toastId);
+                      const res = await apiFetch('/api/seeding', { method: 'POST' });
+                      if(res.ok) {
+                        toast.success("Seeding berhasil dilakukan!", { id: toastId });
+                        refreshData();
+                      } else {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || errData.message || 'Gagal seeding. Periksa konfigurasi Firestore Anda.');
+                      }
                     } catch(e: any) {
                       toast.error(e.message || 'Gagal melakukan seeding', { id: toastId, duration: 8000 });
                     } finally {
@@ -853,30 +1016,15 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key tetap valid) dalam batch 4
             <label className="block text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
               What does the CSV contain?
             </label>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
               {(
                 [
-                  {
-                    v: "students_names",
-                    l: "Student names",
-                    hint: '"name" column only',
-                  },
-                  {
-                    v: "students",
-                    l: "Students (full)",
-                    hint: "name, bio, tags, photo",
-                  },
-                  {
-                    v: "goals_titles",
-                    l: "Goal titles",
-                    hint: '"title" column only',
-                  },
-                  {
-                    v: "goals",
-                    l: "Goals (full)",
-                    hint: "title, points, category_name",
-                  },
-                  { v: "categories", l: "Categories", hint: '"name" column' },
+                  { v: "students_names", l: "Student names", hint: '"name" column only' },
+                  { v: "students", l: "Students (full)", hint: "name, bio, tags, photo" },
+                  { v: "goals_titles", l: "Goal titles", hint: '"title" column only' },
+                  { v: "goals", l: "Goals (full)", hint: "title, points, category_id/name, order" },
+                  { v: "categories", l: "Categories", hint: "name, group_id, order" },
+                  { v: "groups", l: "Groups", hint: "name, order" },
                 ] as { v: ImportType; l: string; hint: string }[]
               ).map((opt) => (
                 <button
