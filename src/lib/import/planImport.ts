@@ -247,10 +247,11 @@ export function planImport(
     const normalized = normalize(mode, raw);
     const parsed = validate(mode, normalized);
     if (!parsed.success) {
+      const issues = (parsed.error as any).issues ?? (parsed.error as any).errors ?? [];
       plan.invalid.push({
         row: rowNum,
         id: normalized.id,
-        reason: parsed.error.errors.map((e) => e.message).join(", "),
+        reason: issues.map((e: any) => e.message).join(", ") || "invalid",
       });
       return;
     }
