@@ -545,6 +545,16 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
 
   const runImport = async () => {
     if (!previewRows || previewRows.length === 0) return;
+    // Full modes go through the dry-run planner. Names-only modes keep their
+    // legacy create-only fast path (they're just seed helpers).
+    if (
+      importType === "students" ||
+      importType === "goals" ||
+      importType === "categories" ||
+      importType === "groups"
+    ) {
+      return analyzeForDryRun();
+    }
     setBusy("import");
     setImportMessage(null);
     const findCol = (candidates: string[]): string | null => {
