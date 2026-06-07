@@ -555,6 +555,9 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
     ) {
       return analyzeForDryRun();
     }
+    // From here, TS knows it's a "names-only" path. Re-widen so the existing
+    // (intentional) branches that also accept the full forms still compile.
+    const it: ImportType = importType;
     setBusy("import");
     setImportMessage(null);
     const findCol = (candidates: string[]): string | null => {
@@ -571,7 +574,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
     const errors: string[] = [];
 
     try {
-      if (importType === "students_names" || importType === "students") {
+      if (it === "students_names" || it === "students") {
         const nameCol = findCol(["name", "student_name", "full_name"]);
         if (!nameCol) throw new Error('CSV must have a "name" column.');
         const bioCol = findCol(["bio", "description"]);
@@ -581,7 +584,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
           const name = (row[nameCol] || "").trim();
           if (!name) continue;
           const payload: any = { name };
-          if (importType === "students") {
+          if (it === "students") {
             if (bioCol) payload.bio = row[bioCol] || "";
             if (photoCol) payload.photo = row[photoCol] || "";
             if (tagsCol) {
@@ -604,14 +607,14 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
             errors.push(`Row "${name}" failed`);
           }
         }
-      } else if (importType === "goals_titles" || importType === "goals") {
+      } else if (it === "goals_titles" || it === "goals") {
         const titleCol = findCol(["title", "goal", "name"]);
         if (!titleCol) throw new Error('CSV must have a "title" column.');
         const ptsCol = findCol(["points", "pts"]);
         const descCol = findCol(["description", "desc"]);
         const catNameCol = findCol(["category_name", "category"]);
         // ---- Smart Import: upsert categories using slugified name as the natural ID. ----
-        if (importType === "goals" && catNameCol) {
+        if (it === "goals" && catNameCol) {
           const slugify = (s: string) =>
             s
               .toLowerCase()
@@ -644,7 +647,7 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
           const title = (row[titleCol] || "").trim();
           if (!title) continue;
           const payload: any = { title, points: 0 };
-          if (importType === "goals") {
+          if (it === "goals") {
             const ptsRaw = ptsCol ? row[ptsCol] : "";
             const pts = parseInt(String(ptsRaw || "0"), 10);
             payload.points = isNaN(pts) ? 0 : pts;
