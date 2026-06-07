@@ -543,6 +543,128 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
     }
   };
 
+  // ============= SMART IMPORT (dry-run + idempotent upsert) =============
+
+  /**
+   * Build an ImportPlan against the current snapshot and open the dry-run
+   * modal. Nothing is written until the admin clicks "Commit".
+   */
+  const analyzeForDryRun = async () => {
+    if (!previewRows) return;
+    setBusy("analyze");
+    setImportMessage(null);
+    try {
+      const mode: ImportMode =
+        importType === "students"
+          ? "students"
+          : importType === "goals"
+            ? "goals"
+            : importType === "categories"
+              ? "categories"
+              : "groups";
+
+      let existing: any[] = [];
+      if (mode === "students") existing = students || [];
+      else if (mode === "goals") existing = masterGoals || [];
+      else if (mode === "categories") existing = categories || [];
+      else {
+        const res = await apiFetch("/api/groups");
+        existing = res.ok ? await res.json() : [];
+      }
+
+      let groupsForFk: any[] = [];
+      if (mode === "categories") {
+        const res = await apiFetch("/api/groups");
+        groupsForFk = res.ok ? await res.json() : [];
+      }
+
+      const built = planImport(mode, previewRows, {
+        existing,
+        categories: categories || [],
+        groups: groupsForFk,
+      });
+      setPlan(built);
+      setPlanMode(mode);
+      setIgnoreInvalid(false);
+    } catch (e: any) {
+      setImportMessage({
+        type: "error",
+        text: "Analyze failed: " + (e?.message || e),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Execute the previously-built plan. Updates use PUT with ONLY the changed
+   * fields (never overwrites omitted columns). Creates use POST. No deletes,
+   * ever.
+   */
+  const commitPlan = async () => {
+    if (!plan || !planMode) return;
+    if (plan.invalid.length > 0 && !ignoreInvalid) return;
+    setCommitting(true);
+    setImportMessage(null);
+    const path = API_PATH[planMode];
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    try {
+      for (const u of plan.toUpdate) {
+        const body: any = { id: u.id };
+        for (const f of u.changedFields) body[f] = (u.after as any)[f];
+        const res = await apiFetch(`${path}/${encodeURIComponent(u.id)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) updated++;
+        else failed++;
+      }
+      for (const c of plan.toCreate) {
+        const body: any = { ...c.data };
+        if (c.id) body.id = c.id;
+        const res = await apiFetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) created++;
+        else failed++;
+      }
+
+      try {
+        await apiFetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "Smart Import",
+            details: `${planMode}: +${created} created, ~${updated} updated, ${plan.unchanged} unchanged, ${failed} failed`,
+            type: "system",
+            timestamp: new Date().toISOString(),
+          }),
+        });
+      } catch {}
+
+      setImportMessage({
+        type: failed > 0 ? "error" : "success",
+        text: `Created ${created} · Updated ${updated} · Unchanged ${plan.unchanged}${failed ? ` · Failed ${failed}` : ""}.`,
+      });
+      if (created + updated > 0) refreshData();
+      setPlan(null);
+      setPlanMode(null);
+      setPreviewRows(null);
+      setPreviewHeaders([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (e: any) {
+      setImportMessage({ type: "error", text: e?.message || String(e) });
+    } finally {
+      setCommitting(false);
+    }
+  };
+
+
   const runImport = async () => {
     if (!previewRows || previewRows.length === 0) return;
     // Full modes go through the dry-run planner. Names-only modes keep their
