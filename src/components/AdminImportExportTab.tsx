@@ -671,54 +671,6 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
             errors.push(`Row "${title}" failed`);
           }
         }
-      } else if (importType === "categories") {
-        const nameCol = findCol(["name", "category", "category_name"]);
-        if (!nameCol) throw new Error('CSV must have a "name" column.');
-        const groupIdCol = findCol(["group_id", "groupid", "groupId"]);
-        const orderCol = findCol(["order", "sort_order", "position"]);
-        for (const row of previewRows) {
-          const name = (row[nameCol] || "").trim();
-          if (!name) continue;
-          const payload: any = { name };
-          if (groupIdCol && row[groupIdCol]) payload.groupId = row[groupIdCol].trim();
-          if (orderCol && row[orderCol] !== "") {
-            const o = parseInt(String(row[orderCol] || "0"), 10);
-            if (!isNaN(o)) payload.order = o;
-          }
-          const res = await apiFetch("/api/categories", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) inserted++;
-          else {
-            failed++;
-            errors.push(`Row "${name}" failed`);
-          }
-        }
-      } else if (importType === "groups") {
-        const nameCol = findCol(["name", "group", "group_name"]);
-        if (!nameCol) throw new Error('CSV must have a "name" column.');
-        const orderCol = findCol(["order", "sort_order", "position"]);
-        for (const row of previewRows) {
-          const name = (row[nameCol] || "").trim();
-          if (!name) continue;
-          const payload: any = { name };
-          if (orderCol && row[orderCol] !== "") {
-            const o = parseInt(String(row[orderCol] || "0"), 10);
-            if (!isNaN(o)) payload.order = o;
-          }
-          const res = await apiFetch("/api/groups", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (res.ok) inserted++;
-          else {
-            failed++;
-            errors.push(`Row "${name}" failed`);
-          }
-        }
       }
 
       // Log activity
