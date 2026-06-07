@@ -1250,5 +1250,161 @@ Dokumen akan ditulis menggunakan ID asli (foreign-key & urutan grup/kategori tet
         </div>
       </section>
     </div>
+
+    {plan && planMode && (
+      <div className="fixed inset-0 bg-base-900/60 backdrop-blur-md z-[100] flex justify-center items-center p-4">
+        <div className="bg-card rounded-2xl shadow-soft w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div>
+              <h3 className="font-black text-lg text-foreground">
+                Dry-Run Preview · {planMode}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                Nothing has been written yet. Review the diff and click Commit
+                to apply.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setPlan(null);
+                setPlanMode(null);
+              }}
+              disabled={committing}
+              className="p-2 hover:bg-secondary rounded-xl"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+
+          <div className="p-5 overflow-y-auto space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div className="text-2xl font-black text-emerald-700">
+                  {plan.toCreate.length}
+                </div>
+                <div className="text-xs font-bold text-emerald-800 uppercase tracking-wide">
+                  Create
+                </div>
+              </div>
+              <div className="rounded-xl border border-primary-200 bg-primary/10 p-3">
+                <div className="text-2xl font-black text-primary">
+                  {plan.toUpdate.length}
+                </div>
+                <div className="text-xs font-bold text-primary uppercase tracking-wide">
+                  Update
+                </div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-3">
+                <div className="text-2xl font-black text-muted-foreground">
+                  {plan.unchanged}
+                </div>
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                  Unchanged
+                </div>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+                <div className="text-2xl font-black text-red-700">
+                  {plan.invalid.length}
+                </div>
+                <div className="text-xs font-bold text-red-800 uppercase tracking-wide">
+                  Invalid
+                </div>
+              </div>
+            </div>
+
+            {plan.toUpdate.length > 0 && (
+              <div>
+                <h4 className="text-sm font-bold text-foreground mb-1">
+                  Updates ({plan.toUpdate.length})
+                </h4>
+                <ul className="text-xs text-muted-foreground space-y-1 max-h-40 overflow-y-auto border border-border rounded-xl p-2">
+                  {plan.toUpdate.slice(0, 50).map((u) => (
+                    <li key={u.id} className="font-mono">
+                      <span className="text-primary">{u.id}</span> →{" "}
+                      {u.changedFields.join(", ")}
+                    </li>
+                  ))}
+                  {plan.toUpdate.length > 50 && (
+                    <li className="opacity-60">
+                      …and {plan.toUpdate.length - 50} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {plan.toCreate.length > 0 && (
+              <div>
+                <h4 className="text-sm font-bold text-foreground mb-1">
+                  New records ({plan.toCreate.length})
+                </h4>
+                <ul className="text-xs text-muted-foreground space-y-1 max-h-40 overflow-y-auto border border-border rounded-xl p-2">
+                  {plan.toCreate.slice(0, 50).map((c) => (
+                    <li key={c.row} className="font-mono">
+                      row {c.row}: {(c.data as any).name || (c.data as any).title}
+                    </li>
+                  ))}
+                  {plan.toCreate.length > 50 && (
+                    <li className="opacity-60">
+                      …and {plan.toCreate.length - 50} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {plan.invalid.length > 0 && (
+              <div>
+                <h4 className="text-sm font-bold text-red-700 mb-1">
+                  Invalid rows ({plan.invalid.length})
+                </h4>
+                <ul className="text-xs text-red-700 space-y-1 max-h-40 overflow-y-auto border border-red-200 bg-red-50 rounded-xl p-2">
+                  {plan.invalid.slice(0, 50).map((v, i) => (
+                    <li key={i} className="font-mono">
+                      row {v.row}: {v.reason}
+                    </li>
+                  ))}
+                </ul>
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={ignoreInvalid}
+                    onChange={(e) => setIgnoreInvalid(e.target.checked)}
+                  />
+                  Skip invalid rows and commit the rest
+                </label>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 px-5 py-4 border-t border-border bg-background">
+            <button
+              onClick={() => {
+                setPlan(null);
+                setPlanMode(null);
+              }}
+              disabled={committing}
+              className="px-4 py-2.5 rounded-xl text-sm font-bold border border-border hover:bg-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={commitPlan}
+              disabled={
+                committing ||
+                (plan.invalid.length > 0 && !ignoreInvalid) ||
+                plan.toCreate.length + plan.toUpdate.length === 0
+              }
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-primary text-white hover:bg-primary-700 disabled:opacity-60"
+            >
+              {committing && <Loader2 className="w-4 h-4 animate-spin" />}
+              Commit ({plan.toCreate.length + plan.toUpdate.length})
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
